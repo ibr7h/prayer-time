@@ -5,3 +5,7 @@ coverage/
 .env
 .env.*
 .DS_Store
+
+dist-android/
+native/node_modules/
+native/android/
