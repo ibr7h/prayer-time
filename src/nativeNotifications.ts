@@ -80,8 +80,7 @@ function notificationId(dateKey: string, prayer: AlertPrayerId): number {
 }
 
 export async function syncNativePrayerNotifications(
-  today: DaySchedule,
-  tomorrow: DaySchedule,
+  days: DaySchedule[],
   place: Place,
   preferences: Preferences
 ): Promise<{ scheduled: number; warning?: string }> {
@@ -95,7 +94,7 @@ export async function syncNativePrayerNotifications(
   await LocalNotifications.cancelAll();
 
   const now = Date.now();
-  const notifications = [today, tomorrow].flatMap((day) =>
+  const notifications = days.flatMap((day) =>
     day.events.flatMap((event) => {
       if (event.id === 'sunrise') return [];
       const id = event.id as AlertPrayerId;
