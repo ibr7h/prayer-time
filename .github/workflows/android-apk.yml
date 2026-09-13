@@ -4,6 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
+      - main
       - android-capacitor-work
     paths:
       - 'src/**'
