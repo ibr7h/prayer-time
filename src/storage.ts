@@ -1,6 +1,7 @@
 import { defaultPreferences, type Place, type Preferences } from './prayers';
 
 const key = 'miqati:settings:v1';
+export const MIQATI_STATE_SAVED_EVENT = 'miqati:state-saved';
 
 export interface StoredState { place: Place | null; preferences: Preferences }
 
@@ -47,5 +48,8 @@ export function loadState(): StoredState {
 }
 
 export function saveState(state: StoredState): void {
-  try { localStorage.setItem(key, JSON.stringify(state)); } catch { /* private mode or full storage */ }
+  try {
+    localStorage.setItem(key, JSON.stringify(state));
+    window.dispatchEvent(new CustomEvent(MIQATI_STATE_SAVED_EVENT));
+  } catch { /* private mode or full storage */ }
 }
