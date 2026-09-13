@@ -1,0 +1,9 @@
+{
+  "appId": "sa.ibr7h.miqati",
+  "appName": "ميقاتي",
+  "webDir": "../dist-android",
+  "backgroundColor": "#f6f5f0",
+  "server": {
+    "androidScheme": "https"
+  }
+}
