@@ -1,0 +1,17 @@
+{
+  "name": "miqati-android-wrapper",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "android:add": "cap add android",
+    "android:sync": "node scripts/prepare-android.mjs && cap sync android",
+    "android:open": "cap open android"
+  },
+  "dependencies": {
+    "@capacitor/core": "8.5.2"
+  },
+  "devDependencies": {
+    "@capacitor/android": "8.5.2",
+    "@capacitor/cli": "8.5.2"
+  }
+}
