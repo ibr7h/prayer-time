@@ -6,6 +6,7 @@ on:
     branches:
       - main
       - android-capacitor-work
+      - fix-native-adhan
     paths:
       - 'src/**'
       - 'public/**'
@@ -44,7 +45,7 @@ jobs:
         uses: android-actions/setup-android@v3
 
       - name: Install web dependencies
-        run: npm ci
+        run: npm install --no-audit --no-fund
 
       - name: Test web app
         run: npm test
@@ -64,7 +65,7 @@ jobs:
         working-directory: native
         run: npx cap sync android
 
-      - name: Apply Android permissions
+      - name: Apply Android permissions and adhan sounds
         run: node native/scripts/prepare-android.mjs
 
       - name: Build debug APK and unsigned release AAB
@@ -76,7 +77,7 @@ jobs:
       - name: Upload Miqati debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: miqati-android-debug
+          name: miqati-android-debug-native-adhan
           path: native/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
@@ -84,7 +85,7 @@ jobs:
       - name: Upload Miqati unsigned release AAB
         uses: actions/upload-artifact@v4
         with:
-          name: miqati-android-release-aab-unsigned
+          name: miqati-android-release-aab-native-adhan-unsigned
           path: native/android/app/build/outputs/bundle/release/app-release.aab
           if-no-files-found: error
           retention-days: 14
