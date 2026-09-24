@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Compass, Navigation, RotateCcw, ShieldCheck, Smartphone } from 'lucide-react';
+import { Compass, RotateCcw, ShieldCheck, Smartphone } from 'lucide-react';
 
 type CompassState = 'idle' | 'listening' | 'denied' | 'unsupported' | 'error';
 
@@ -285,7 +285,7 @@ export default function QiblaCompass({ bearing, placeName }: {
           aria-hidden="true"
         >
           <span className="qibla-kaaba">◆</span>
-          <span className="qibla-arrow"><Navigation size={31} fill="currentColor" /></span>
+          <span className="qibla-arrow" />
         </div>
         <span className="phone-forward" aria-hidden="true">▲</span>
       </div>
