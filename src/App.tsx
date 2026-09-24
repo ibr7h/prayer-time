@@ -11,6 +11,12 @@ import {
 } from './prayers';
 import { loadState, saveState } from './storage';
 import { APP_VERSION, startAppUpdater, type AppUpdater, type UpdateView } from './updater';
+import {
+  getNativeNotificationPermission, isNativeNotificationPlatform,
+  requestNativeNotificationPermission, schedulePrayerNotifications,
+  testNativePrayerNotification as sendNativeTestNotification,
+  type NativeNotificationPermission
+} from './nativeNotifications';
 
 type Panel = 'location' | 'settings' | 'info' | null;
 const alertIds: AlertPrayerId[] = ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha'];
@@ -84,6 +90,7 @@ function standalone(): boolean {
 }
 
 export default function App() {
+  const nativeNotifications = isNativeNotificationPlatform();
   const [stored, setStored] = useState(loadState);
   const { place, preferences } = stored;
   const [now, setNow] = useState(() => new Date());
@@ -94,6 +101,9 @@ export default function App() {
   const [online, setOnline] = useState(navigator.onLine);
   const [permission, setPermission] = useState(
     typeof Notification === 'undefined' ? 'unsupported' : Notification.permission
+  );
+  const [nativePermission, setNativePermission] = useState<NativeNotificationPermission>(
+    nativeNotifications ? 'prompt' : 'unsupported'
   );
   const [coordinates, setCoordinates] = useState({ lat: '', lon: '' });
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -151,6 +161,23 @@ export default function App() {
   const upcoming = schedules ? nextPrayer(schedules.today, schedules.tomorrow, now) : null;
   const dates = dateLabels(now, placeTimeZone);
 
+  useEffect(() => {
+    if (!nativeNotifications) return;
+    void getNativeNotificationPermission().then(setNativePermission);
+  }, [nativeNotifications]);
+
+  useEffect(() => {
+    if (!nativeNotifications || nativePermission !== 'granted' || !place) return;
+    let active = true;
+    void schedulePrayerNotifications(place, preferences).then((result) => {
+      if (!active || !result.warning) return;
+      setMessage('تمت جدولة التنبيهات، لكن Android قد يؤخر بعضها لأن التنبيهات الدقيقة غير مفعّلة في إعدادات النظام.');
+    }).catch(() => {
+      if (active) setMessage('تعذّرت إعادة جدولة تنبيهات الصلاة الأصلية. افتح الإعدادات وحاول التفعيل مرة أخرى.');
+    });
+    return () => { active = false; };
+  }, [nativeNotifications, nativePermission, place, preferences, dayKey]);
+
   const updatePreferences = (patch: Partial<Preferences>) => {
     setStored((current) => ({ ...current, preferences: { ...current.preferences, ...patch } }));
   };
@@ -199,7 +226,7 @@ export default function App() {
         marks.add(beforeKey);
         changed = true;
         setMessage(`باقي ٥ دقائق على صلاة ${prayerNames[id]}`);
-        if (permission === 'granted') {
+        if (!nativeNotifications && permission === 'granted') {
           void showPrayerNotification(
             `باقي ٥ دقائق على صلاة ${prayerNames[id]}`,
             `${place.name} · وقت الصلاة ${timeLabel(event.at, place.timeZone)}`,
@@ -213,7 +240,7 @@ export default function App() {
         changed = true;
         setMessage(`حان الآن وقت صلاة ${prayerNames[id]}`);
         if (preferences.soundOn) void playAudio(id);
-        if (permission === 'granted') {
+        if (!nativeNotifications && permission === 'granted') {
           void showPrayerNotification(
             `حان وقت صلاة ${prayerNames[id]}`,
             `بحسب ${place.name} · ${timeLabel(event.at, place.timeZone)}`,
@@ -224,7 +251,7 @@ export default function App() {
     }
 
     if (changed) savePrayerAlertMarks(marks);
-  }, [now, schedules, place, preferences.alerts, preferences.soundOn, permission, playAudio]);
+  }, [now, schedules, place, preferences.alerts, preferences.soundOn, permission, playAudio, nativeNotifications]);
 
   const useMyLocation = useCallback((quiet = false) => {
     if (!navigator.geolocation) { if (!quiet) setMessage('تحديد الموقع غير مدعوم في هذا المتصفح. اختر مدينة أو أدخل الإحداثيات.'); return; }
@@ -280,6 +307,24 @@ export default function App() {
   };
 
   const requestNotifications = async () => {
+    if (nativeNotifications) {
+      const result = await requestNativeNotificationPermission();
+      setNativePermission(result);
+      if (result === 'granted') {
+        try {
+          const summary = place ? await schedulePrayerNotifications(place, preferences) : null;
+          setMessage(place
+            ? `فُعّلت التنبيهات الأصلية وجدولت ${summary?.scheduled ?? 0} تنبيهًا للأيام الخمسة القادمة.`
+            : 'فُعّلت التنبيهات الأصلية. حدّد موقعك لجدولة أوقات الصلاة.');
+        } catch {
+          setMessage('تم السماح بالتنبيهات، لكن تعذّرت الجدولة. أعد المحاولة بعد تحديد الموقع.');
+        }
+      } else {
+        setMessage('لم يُسمح بالتنبيهات الأصلية. يمكنك تغيير الإذن من إعدادات الجهاز.');
+      }
+      return;
+    }
+
     if (typeof Notification === 'undefined' || !('serviceWorker' in navigator)) {
       setMessage('إشعارات هذا المتصفح غير متاحة. يمكن إبقاء التطبيق مفتوحًا واستخدام الصوت.');
       return;
@@ -294,6 +339,19 @@ export default function App() {
       setMessage('للسماح بإشعارات iPhone، أضف التطبيق أولًا إلى الشاشة الرئيسية وافتحه منها.');
     }
   };
+
+  const testNativeNotification = async () => {
+    try {
+      const ok = await sendNativeTestNotification();
+      setMessage(ok ? 'سيصل تنبيه اختبار خلال ٥ ثوانٍ.' : 'تعذّر اختبار التنبيه؛ تحقق من إذن الإشعارات.');
+    } catch {
+      setMessage('تعذّر إنشاء تنبيه الاختبار على هذا الجهاز.');
+    }
+  };
+
+  const notificationGranted = nativeNotifications
+    ? nativePermission === 'granted'
+    : permission === 'granted';
 
   const toggleAlert = (id: AlertPrayerId) => {
     updatePreferences({ alerts: { ...preferences.alerts, [id]: !preferences.alerts[id] } });
@@ -367,7 +425,7 @@ export default function App() {
 
         {place && <div className="qibla-card"><span className="qibla-symbol"><Compass size={21} /></span><div><strong>اتجاه القبلة</strong><small>من الشمال الجغرافي</small></div><span className="qibla-angle" dir="ltr">{bearing}°</span></div>}
 
-        <section className="reality-card"><span className="reality-icon"><Info size={20} /></span><div><strong>تنبيه مهم بخصوص iPhone</strong><p>الصوت والتنبيه المباشر يعملان أثناء فتح التطبيق. عند إغلاقه أو قفل الشاشة لا نضمن وصول تنبيه أو تشغيل الأذان؛ إشعارات الخلفية تحتاج خدمة Push، والصوت الكامل يحتاج تطبيقًا أصليًا.</p><button className="text-action" onClick={() => setPanel('info')}>كيف يعمل التطبيق؟ <ChevronLeft size={15} /></button></div></section>
+        <section className="reality-card"><span className="reality-icon"><Info size={20} /></span><div><strong>{nativeNotifications ? 'تنبيهات أصلية على الجهاز' : 'تنبيه مهم بخصوص iPhone'}</strong><p>{nativeNotifications ? 'تُجدول تنبيهات الصلاة محليًا على الجهاز للأيام الخمسة القادمة، لذلك يمكن أن تصل عند قفل الشاشة أو إغلاق التطبيق. الأذان الكامل يبقى ميزة منفصلة عن صوت الإشعار.' : 'الصوت والتنبيه المباشر يعملان أثناء فتح التطبيق. عند إغلاقه أو قفل الشاشة لا نضمن وصول تنبيه أو تشغيل الأذان؛ إشعارات الخلفية تحتاج Web Push أو النسخة الأصلية من التطبيق.'}</p><button className="text-action" onClick={() => setPanel('info')}>كيف يعمل التطبيق؟ <ChevronLeft size={15} /></button></div></section>
 
         <footer className="footer"><span><ShieldCheck size={16} /> الحساب على جهازك · إحداثياتك لا تُرسل لخادم التطبيق</span><span>{online ? 'جاهز للعمل دون اتصال بعد أول تحميل' : <><WifiOff size={14} /> أنت غير متصل، المواقيت متاحة</>}</span><span>الإصدار v{APP_VERSION}</span></footer>
       </main>
@@ -395,7 +453,8 @@ export default function App() {
             <div className="adjust-row"><div><strong>تصحيح الأوقات</strong><small>يُطبّق على الصلوات الخمس، لا الشروق</small></div><div className="stepper"><button aria-label="نقصان دقيقة" disabled={preferences.adjustment <= -30} onClick={() => updatePreferences({ adjustment: preferences.adjustment - 1 })}><Minus size={16} /></button><span dir="ltr">{preferences.adjustment > 0 ? '+' : ''}{preferences.adjustment} د</span><button aria-label="زيادة دقيقة" disabled={preferences.adjustment >= 30} onClick={() => updatePreferences({ adjustment: preferences.adjustment + 1 })}><Plus size={16} /></button></div></div>
             <div className="settings-divider" />
             <label className="switch-row"><span className="switch-icon"><Volume2 size={20} /></span><span><strong>صوت الأذان</strong><small>عندما يحين الوقت والتطبيق مفتوح</small></span><input aria-label="صوت الأذان" type="checkbox" checked={preferences.soundOn} onChange={(event) => updatePreferences({ soundOn: event.target.checked })} /><span className="switch-track" /></label>
-            <div className="notification-row"><span className="switch-icon"><Bell size={20} /></span><div><strong>تنبيهات الصلاة</strong><small>{permission === 'granted' ? 'قبل الصلاة بـ٥ دقائق وعند دخول الوقت' : 'لـ iPhone: ثبّت التطبيق أولًا من Safari'}</small></div><button onClick={() => void requestNotifications()} disabled={permission === 'granted'}>{permission === 'granted' ? 'مفعّل' : 'تفعيل'}</button></div>
+            <div className="notification-row"><span className="switch-icon"><Bell size={20} /></span><div><strong>تنبيهات الصلاة</strong><small>{nativeNotifications ? (nativePermission === 'granted' ? 'Native · تعمل عند قفل الشاشة · جدولة ٥ أيام' : nativePermission === 'denied' ? 'الإذن مرفوض من إعدادات الجهاز' : 'تنبيهات محلية أصلية لـ iPhone وAndroid') : (permission === 'granted' ? 'قبل الصلاة بـ٥ دقائق وعند دخول الوقت أثناء تشغيل PWA' : 'لـ iPhone PWA: ثبّت التطبيق أولًا من Safari')}</small></div><button onClick={() => void requestNotifications()} disabled={notificationGranted}>{notificationGranted ? 'مفعّل' : 'تفعيل'}</button></div>
+            {nativeNotifications && nativePermission === 'granted' && <div className="notification-row"><span className="switch-icon"><BellRing size={20} /></span><div><strong>اختبار التنبيه</strong><small>أرسل تنبيهًا تجريبيًا بعد ٥ ثوانٍ</small></div><button onClick={() => void testNativeNotification()}>اختبار</button></div>}
             <div className="notification-row"><span className="switch-icon"><RefreshCw size={20} /></span><div><strong>تحديث التطبيق</strong><small>الإصدار v{APP_VERSION} · فحص تلقائي عند الفتح والعودة للتطبيق</small></div><button onClick={() => void updaterRef.current?.check(true)}>فحص</button></div>
             <h3 className="sheet-section-title">الصلاة المشمولة بالتنبيه</h3><div className="alert-grid">{alertIds.map((id) => <label key={id} className="alert-choice"><input type="checkbox" checked={preferences.alerts[id]} onChange={() => toggleAlert(id)} /><span>{prayerNames[id]}</span><Check size={15} /></label>)}</div>
             <p className="fine-print">عند شهر رمضان، تُضاف ٣٠ دقيقة لعشاء طريقة أم القرى تلقائيًا. راجع تقويم مسجدك.</p>
@@ -404,7 +463,7 @@ export default function App() {
           {panel === 'info' && <div className="sheet-body info-body">
             <div className="info-item"><span><MapPin size={20} /></span><div><strong>موقعك وخصوصيتك</strong><p>المواقيت تُحسب على الجهاز من إحداثياتك ولا نرسلها إلى خادم التطبيق. يُحدّث الموقع عند الفتح إن كنت قد أذنت به. للمواقع خارج السعودية، تأكد أن توقيت الجهاز يطابق المكان.</p></div></div>
             <div className="info-item"><span><Headphones size={20} /></span><div><strong>الأذان الصوتي</strong><p>اضغط تشغيل بجانب الصلاة لتجربة الصوت. يمكن للتطبيق محاولة تشغيله عند دخول الوقت أثناء فتحه، لكن المتصفح قد يمنع التشغيل التلقائي.</p></div></div>
-            <div className="info-item"><span><BellRing size={20} /></span><div><strong>تنبيهات الصلاة</strong><p>أثناء تشغيل التطبيق يظهر تنبيه قبل الصلاة بـ٥ دقائق ثم تنبيه عند دخول الوقت، مع منع تكرارهما في اليوم نفسه. عند إغلاق التطبيق أو قفل الآيفون لا تُضمن هذه التنبيهات؛ Web Push أو التطبيق الأصلي مطلوبان للعمل الخلفي الموثوق.</p></div></div>
+            <div className="info-item"><span><BellRing size={20} /></span><div><strong>تنبيهات الصلاة</strong><p>{nativeNotifications ? 'في نسخة iPhone/Android تُجدول التنبيهات محليًا على الجهاز: قبل الصلاة بـ٥ دقائق وعند دخول الوقت، وتُعاد الجدولة تلقائيًا عند تغيير الموقع أو طريقة الحساب أو التصحيح أو الصلوات المفعّلة.' : 'في نسخة PWA يظهر تنبيه قبل الصلاة بـ٥ دقائق ثم تنبيه عند دخول الوقت أثناء تشغيل التطبيق. للعمل عند الإغلاق يلزم Web Push أو تثبيت النسخة الأصلية من ميقاتي.'}</p></div></div>
             <div className="info-item"><span><Smartphone size={20} /></span><div><strong>إضافة التطبيق للآيفون</strong><p>بعد نشره عبر HTTPS، افتح الرابط في Safari ثم اختر «مشاركة ← إضافة إلى الشاشة الرئيسية». بعد أول تحميل تصبح الحسابات والصوت متاحة دون إنترنت.</p></div></div>
             <span className="install-status">{standalone() ? 'التطبيق مفتوح من الشاشة الرئيسية' : 'تعمل الآن في المتصفح؛ يمكنك إضافته للشاشة الرئيسية بعد نشره'}</span>
           </div>}
