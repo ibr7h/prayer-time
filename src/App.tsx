@@ -10,6 +10,7 @@ import {
   type PrayerEvent, type PrayerId, type Preferences
 } from './prayers';
 import { loadState, saveState } from './storage';
+import QiblaCompass from './QiblaCompass';
 import { APP_VERSION, startAppUpdater, type AppUpdater, type UpdateView } from './updater';
 import {
   getNativeNotificationPermission, isNativeNotificationPlatform,
@@ -18,7 +19,7 @@ import {
   type NativeNotificationPermission
 } from './nativeNotifications';
 
-type Panel = 'location' | 'settings' | 'info' | null;
+type Panel = 'location' | 'settings' | 'qibla' | 'info' | null;
 const alertIds: AlertPrayerId[] = ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha'];
 const icons = { fajr: Moon, sunrise: Sunrise, dhuhr: Sun, asr: Sun, maghrib: Sunset, isha: Moon };
 const PRAYER_ALERT_STORAGE = 'miqati:prayer-alerts:v1';
@@ -423,7 +424,7 @@ export default function App() {
           <div className="empty-state"><LocateFixed size={34} /><strong>المواقيت بانتظار موقعك</strong><p>نحسبها على جهازك دون إرسال إحداثياتك إلى خادم التطبيق.</p><button className="primary-button" onClick={() => setPanel('location')}>تحديد الموقع</button></div>
         )}
 
-        {place && <div className="qibla-card"><span className="qibla-symbol"><Compass size={21} /></span><div><strong>اتجاه القبلة</strong><small>من الشمال الجغرافي</small></div><span className="qibla-angle" dir="ltr">{bearing}°</span></div>}
+        {place && <button className="qibla-card" onClick={() => setPanel('qibla')} aria-label="فتح بوصلة القبلة"><span className="qibla-symbol"><Compass size={21} /></span><div><strong>اتجاه القبلة</strong><small>اضغط لفتح البوصلة التفاعلية</small></div><span className="qibla-angle" dir="ltr">{bearing}°</span><ChevronLeft size={18} /></button>}
 
         <section className="reality-card"><span className="reality-icon"><Info size={20} /></span><div><strong>{nativeNotifications ? 'تنبيهات أصلية على الجهاز' : 'تنبيه مهم بخصوص iPhone'}</strong><p>{nativeNotifications ? 'تُجدول تنبيهات الصلاة محليًا على الجهاز للأيام الخمسة القادمة، لذلك يمكن أن تصل عند قفل الشاشة أو إغلاق التطبيق. الأذان الكامل يبقى ميزة منفصلة عن صوت الإشعار.' : 'الصوت والتنبيه المباشر يعملان أثناء فتح التطبيق. عند إغلاقه أو قفل الشاشة لا نضمن وصول تنبيه أو تشغيل الأذان؛ إشعارات الخلفية تحتاج Web Push أو النسخة الأصلية من التطبيق.'}</p><button className="text-action" onClick={() => setPanel('info')}>كيف يعمل التطبيق؟ <ChevronLeft size={15} /></button></div></section>
 
@@ -434,7 +435,7 @@ export default function App() {
 
       {panel && <div className="modal-layer" onMouseDown={(event) => { if (event.target === event.currentTarget) setPanel(null); }}>
         <section className="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
-          <div className="sheet-handle" /><div className="sheet-top"><h2 id="sheet-title">{panel === 'location' ? 'اختيار الموقع' : panel === 'settings' ? 'الإعدادات' : 'عن التنبيهات'}</h2><button className="icon-button" onClick={() => setPanel(null)} aria-label="إغلاق"><X size={20} /></button></div>
+          <div className="sheet-handle" /><div className="sheet-top"><h2 id="sheet-title">{panel === 'location' ? 'اختيار الموقع' : panel === 'settings' ? 'الإعدادات' : panel === 'qibla' ? 'بوصلة القبلة' : 'عن التنبيهات'}</h2><button className="icon-button" onClick={() => setPanel(null)} aria-label="إغلاق"><X size={20} /></button></div>
 
           {panel === 'location' && <div className="sheet-body">
             <p className="sheet-intro">نستخدم الموقع لحساب أوقات الصلاة على جهازك فقط. يمكنك تغييره في أي وقت.</p>
@@ -458,6 +459,11 @@ export default function App() {
             <div className="notification-row"><span className="switch-icon"><RefreshCw size={20} /></span><div><strong>تحديث التطبيق</strong><small>الإصدار v{APP_VERSION} · فحص تلقائي عند الفتح والعودة للتطبيق</small></div><button onClick={() => void updaterRef.current?.check(true)}>فحص</button></div>
             <h3 className="sheet-section-title">الصلاة المشمولة بالتنبيه</h3><div className="alert-grid">{alertIds.map((id) => <label key={id} className="alert-choice"><input type="checkbox" checked={preferences.alerts[id]} onChange={() => toggleAlert(id)} /><span>{prayerNames[id]}</span><Check size={15} /></label>)}</div>
             <p className="fine-print">عند شهر رمضان، تُضاف ٣٠ دقيقة لعشاء طريقة أم القرى تلقائيًا. راجع تقويم مسجدك.</p>
+          </div>}
+
+          {panel === 'qibla' && place && bearing !== null && <div className="sheet-body qibla-sheet-body">
+            <p className="sheet-intro">وجّه أعلى الهاتف أمامك. على iPhone قد يطلب Safari إذن الوصول إلى مستشعرات الحركة عند تشغيل البوصلة لأول مرة.</p>
+            <QiblaCompass bearing={bearing} placeName={place.name} />
           </div>}
 
           {panel === 'info' && <div className="sheet-body info-body">
