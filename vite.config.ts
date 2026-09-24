@@ -23,7 +23,7 @@ export default defineConfig(({ mode }) => {
           id: '/prayer-time/',
           name: 'ميقاتي | مواقيت الصلاة',
           short_name: 'ميقاتي',
-          description: 'مواقيت الصلاة من موقعك، مع تنبيهات PWA وتنبيهات محلية أصلية على iOS وAndroid.',
+          description: 'مواقيت الصلاة من موقعك، مع بوصلة قبلة تفاعلية وتنبيهات PWA وتنبيهات محلية أصلية على iOS وAndroid.',
           lang: 'ar',
           dir: 'rtl',
           theme_color: '#102c37',
