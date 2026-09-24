@@ -9,4 +9,4 @@ coverage/
 dist-android/
 native/node_modules/
 native/android/
-native/ios/\n
+native/ios/
