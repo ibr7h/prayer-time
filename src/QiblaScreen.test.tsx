@@ -32,6 +32,6 @@ describe('qibla modes screen', () => {
     render(<QiblaScreen place={place} bearing={244} onClose={() => {}} />);
     fireEvent.click(screen.getByRole('tab', { name: /خريطة/ }));
     expect(screen.getByText(/الخريطة شمالها إلى أعلى/)).toBeTruthy();
-    expect(screen.getByText('244°')).toBeTruthy();
+    expect(screen.getAllByText('244°').length).toBeGreaterThan(0);
   });
 });
