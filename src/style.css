@@ -51,14 +51,14 @@
 .compass-dial:before{content:"";position:absolute;inset:18px;border-radius:50%;background:repeating-conic-gradient(from -1deg,#8ca19a 0 2deg,transparent 2deg 15deg);mask:radial-gradient(circle,transparent 0 84%,#000 85%);opacity:.62}
 .compass-dial:after{content:"";position:absolute;inset:35px;border-radius:50%;border:1px solid #e4eae4;pointer-events:none}
 .compass-dial.is-aligned{border-color:#4ca884;box-shadow:inset 0 0 0 9px #e7f4eb,0 0 0 5px #63b89422,0 12px 28px #19383a12}
-.compass-cardinals{position:absolute;inset:0;transition:transform .12s linear}
+.compass-cardinals{position:absolute;inset:0;will-change:transform;backface-visibility:hidden;transform:translateZ(0)}
 .cardinal{position:absolute;font-size:13px;font-weight:900;color:#526d68;z-index:2}
 .cardinal-n{top:25px;left:50%;transform:translateX(-50%);color:#b06e58}
 .cardinal-e{right:26px;top:50%;transform:translateY(-50%)}
 .cardinal-s{bottom:24px;left:50%;transform:translateX(-50%)}
 .cardinal-w{left:25px;top:50%;transform:translateY(-50%)}
 .compass-center{position:absolute;left:50%;top:50%;width:13px;height:13px;border-radius:50%;background:#153d42;border:3px solid #fff;box-shadow:0 0 0 2px #b7c9c1;transform:translate(-50%,-50%);z-index:6}
-.qibla-needle{position:absolute;inset:0;transform-origin:50% 50%;transition:transform .12s linear;z-index:4}
+.qibla-needle{position:absolute;inset:0;transform-origin:50% 50%;will-change:transform;backface-visibility:hidden;transform:translateZ(0);z-index:4}
 .qibla-arrow{position:absolute;top:49px;left:50%;transform:translateX(-50%);color:#2d8a6d;filter:drop-shadow(0 4px 5px #28594b25)}
 .qibla-kaaba{position:absolute;top:17px;left:50%;transform:translateX(-50%) rotate(45deg);width:21px;height:21px;display:grid;place-items:center;background:#1a3337;color:#d2b06b;border-radius:4px;font-size:0;box-shadow:0 3px 8px #152c3030}
 .qibla-kaaba:after{content:"";width:9px;height:9px;background:#d2b06b;border-radius:1px}
