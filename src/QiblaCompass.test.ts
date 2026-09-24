@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { headingFromOrientation, normalizeDegrees, signedBearingDelta } from './QiblaCompass';
+import { animateHeadingStep, headingFromOrientation, normalizeDegrees, signedBearingDelta, smoothSensorHeading } from './QiblaCompass';
 
 describe('qibla compass math', () => {
   it('normalizes headings into a 0-359 degree range', () => {
@@ -32,5 +32,22 @@ describe('qibla compass math', () => {
       gamma: 0
     } as DeviceOrientationEvent);
     expect(absolute?.heading).toBe(270);
+  });
+
+  it('smooths noisy sensor readings while remaining responsive to real turns', () => {
+    expect(smoothSensorHeading(100, 100.2, 8)).toBe(100);
+    expect(smoothSensorHeading(100, 102, 8)).toBeGreaterThan(100);
+    expect(smoothSensorHeading(100, 102, 8)).toBeLessThan(102);
+    expect(smoothSensorHeading(350, 10, 8)).toBeGreaterThan(350);
+  });
+
+  it('animates toward the target in bounded steps and respects the circular boundary', () => {
+    const first = animateHeadingStep(100, 130, 8);
+    expect(first).toBeGreaterThan(100);
+    expect(first).toBeLessThanOrEqual(104.5);
+
+    const wrapped = animateHeadingStep(359, 1, 8);
+    expect(wrapped).toBeGreaterThan(359);
+    expect(wrapped).toBeLessThan(360);
   });
 });
