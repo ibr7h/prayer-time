@@ -8,6 +8,7 @@ describe('qibla compass math', () => {
   });
 
   it('returns the shortest signed turn toward the qibla', () => {
+    expect(signedBearingDelta(328, 328)).toBe(0);
     expect(signedBearingDelta(10, 350)).toBe(20);
     expect(signedBearingDelta(350, 10)).toBe(-20);
     expect(signedBearingDelta(180, 0)).toBe(-180);
