@@ -39,7 +39,8 @@ export default defineConfig(({ mode }) => {
         workbox: {
           globPatterns: ['**/*.{js,css,html,svg,png,mp3,json}'],
           maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
-          navigateFallback: '/prayer-time/index.html'
+          navigateFallback: '/prayer-time/index.html',
+          importScripts: ['notification-sw.js']
         }
       })] : [])
     ],
