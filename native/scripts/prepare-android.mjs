@@ -12,7 +12,8 @@ if (!existsSync(manifestPath)) {
 let manifest = readFileSync(manifestPath, 'utf8');
 const permissions = [
   'android.permission.ACCESS_COARSE_LOCATION',
-  'android.permission.ACCESS_FINE_LOCATION'
+  'android.permission.ACCESS_FINE_LOCATION',
+  'android.permission.SCHEDULE_EXACT_ALARM'
 ];
 
 const missing = permissions.filter((permission) => !manifest.includes(permission));
@@ -22,7 +23,7 @@ if (missing.length) {
     .join('\n');
   manifest = manifest.replace(/\s*<application\b/, `\n${declarations}\n\n    <application`);
   writeFileSync(manifestPath, manifest);
-  console.log(`Added Android location permissions: ${missing.join(', ')}`);
+  console.log(`Added Android permissions: ${missing.join(', ')}`);
 } else {
-  console.log('Android location permissions already present.');
+  console.log('Required Android permissions already present.');
 }
