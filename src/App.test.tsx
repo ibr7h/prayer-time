@@ -31,14 +31,16 @@ describe('phone app interactions', () => {
     expect(saved.preferences.method).toBe('egyptian');
     expect(saved.preferences.adjustment).toBe(1);
   });
-  it('opens the interactive qibla compass from the qibla card', () => {
+  it('opens the full qibla screen with compass, arrows, and map modes', () => {
     render(<App />);
     fireEvent.click(screen.getByRole('button', { name: 'تحديد الموقع' }));
     fireEvent.click(screen.getByRole('button', { name: 'الرياض' }));
-    fireEvent.click(screen.getByRole('button', { name: 'فتح بوصلة القبلة' }));
-    expect(screen.getByRole('heading', { name: 'بوصلة القبلة' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'فتح شاشة القبلة' }));
+    expect(screen.getByRole('heading', { name: 'القبلة' })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: /بوصلة/ })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: /أسهم/ })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: /خريطة/ })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'تشغيل البوصلة' })).toBeTruthy();
-    expect(screen.getByText(/زاوية القبلة من الشمال الجغرافي/)).toBeTruthy();
   });
 
 });
