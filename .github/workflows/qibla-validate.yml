@@ -1,0 +1,38 @@
+name: Validate Qibla Compass
+
+on:
+  push:
+    branches:
+      - pwa-qibla-compass-v0.4
+    paths:
+      - 'src/**'
+      - 'public/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'vite.config.ts'
+      - '.github/workflows/qibla-validate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install
+        run: npm ci
+      - name: Test
+        run: npm test
+      - name: Build PWA
+        run: npm run build
+      - name: Build Capacitor web bundle
+        run: npm run build -- --mode capacitor
