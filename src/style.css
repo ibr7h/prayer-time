@@ -59,7 +59,7 @@
 .cardinal-w{left:25px;top:50%;transform:translateY(-50%)}
 .compass-center{position:absolute;left:50%;top:50%;width:13px;height:13px;border-radius:50%;background:#153d42;border:3px solid #fff;box-shadow:0 0 0 2px #b7c9c1;transform:translate(-50%,-50%);z-index:6}
 .qibla-needle{position:absolute;inset:0;transform-origin:50% 50%;will-change:transform;backface-visibility:hidden;transform:translateZ(0);z-index:4}
-.qibla-arrow{position:absolute;top:49px;left:50%;transform:translateX(-50%);color:#2d8a6d;filter:drop-shadow(0 4px 5px #28594b25)}
+.qibla-arrow{position:absolute;top:49px;left:50%;width:34px;height:43px;transform:translateX(-50%);filter:drop-shadow(0 4px 5px #28594b25)}.qibla-arrow:before{content:"";position:absolute;top:0;left:50%;width:34px;height:34px;background:#2d8a6d;clip-path:polygon(50% 0,100% 100%,50% 78%,0 100%);transform:translateX(-50%)}.qibla-arrow:after{content:"";position:absolute;top:22px;left:50%;width:8px;height:18px;border-radius:5px;background:#2d8a6d;transform:translateX(-50%)}
 .qibla-kaaba{position:absolute;top:17px;left:50%;transform:translateX(-50%) rotate(45deg);width:21px;height:21px;display:grid;place-items:center;background:#1a3337;color:#d2b06b;border-radius:4px;font-size:0;box-shadow:0 3px 8px #152c3030}
 .qibla-kaaba:after{content:"";width:9px;height:9px;background:#d2b06b;border-radius:1px}
 .phone-forward{position:absolute;top:2px;left:50%;transform:translateX(-50%);font-size:13px;color:#1d5d55;z-index:8}
