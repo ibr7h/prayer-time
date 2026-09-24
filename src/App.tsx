@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Bell, BellRing, Check, ChevronLeft, Clock3, Compass, Headphones, Info,
-  LocateFixed, MapPin, Minus, Moon, Pause, Play, Plus, Settings2,
+  LocateFixed, MapPin, Minus, Moon, Pause, Play, Plus, RefreshCw, Settings2,
   ShieldCheck, Smartphone, Sun, Sunrise, Sunset, Volume2, VolumeX, WifiOff, X
 } from 'lucide-react';
 import {
@@ -10,10 +10,42 @@ import {
   type PrayerEvent, type PrayerId, type Preferences
 } from './prayers';
 import { loadState, saveState } from './storage';
+import { APP_VERSION, startAppUpdater, type AppUpdater, type UpdateView } from './updater';
 
 type Panel = 'location' | 'settings' | 'info' | null;
 const alertIds: AlertPrayerId[] = ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha'];
 const icons = { fajr: Moon, sunrise: Sunrise, dhuhr: Sun, asr: Sun, maghrib: Sunset, isha: Moon };
+const PRAYER_ALERT_STORAGE = 'miqati:prayer-alerts:v1';
+
+function prayerAlertMarks(dateKey: string): Set<string> {
+  try {
+    const raw = JSON.parse(localStorage.getItem(PRAYER_ALERT_STORAGE) ?? '[]');
+    return new Set(Array.isArray(raw) ? raw.filter((item) => String(item).startsWith(`${dateKey}|`)) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function savePrayerAlertMarks(marks: Set<string>) {
+  try { localStorage.setItem(PRAYER_ALERT_STORAGE, JSON.stringify([...marks])); } catch { /* ignore */ }
+}
+
+async function showPrayerNotification(title: string, body: string, tag: string): Promise<boolean> {
+  if (typeof Notification === 'undefined' || Notification.permission !== 'granted' || !('serviceWorker' in navigator)) return false;
+  try {
+    const registration = await navigator.serviceWorker.getRegistration(import.meta.env.BASE_URL) ?? await navigator.serviceWorker.ready;
+    await registration.showNotification(title, {
+      body,
+      icon: `${import.meta.env.BASE_URL}icon-192.png`,
+      badge: `${import.meta.env.BASE_URL}icon-192.png`,
+      tag,
+      data: { url: import.meta.env.BASE_URL }
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function formatCountdown(seconds: number): string {
   const parts = [Math.floor(seconds / 3600), Math.floor((seconds % 3600) / 60), seconds % 60];
@@ -65,8 +97,8 @@ export default function App() {
   );
   const [coordinates, setCoordinates] = useState({ lat: '', lon: '' });
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const lastTickRef = useRef(Date.now());
-  const lastAlertRef = useRef('');
+  const updaterRef = useRef<AppUpdater | null>(null);
+  const [updateView, setUpdateView] = useState<UpdateView | null>(null);
 
   useEffect(() => saveState(stored), [stored]);
   useEffect(() => {
@@ -81,6 +113,15 @@ export default function App() {
       document.removeEventListener('visibilitychange', visible);
       window.removeEventListener('online', network);
       window.removeEventListener('offline', network);
+    };
+  }, []);
+
+  useEffect(() => {
+    const updater = startAppUpdater(setUpdateView, setMessage);
+    updaterRef.current = updater;
+    return () => {
+      updaterRef.current = null;
+      updater.dispose();
     };
   }, []);
 
@@ -135,30 +176,55 @@ export default function App() {
     catch { if (audioRef.current === audio) audioRef.current = null; setPlaying(null); setMessage('لم يسمح الجهاز بتشغيل الصوت تلقائيًا. اضغط تشغيل الأذان يدويًا.'); }
   }, [stopAudio]);
 
-  // Browsers cannot schedule reliable background alarms. This fires only while the page is active.
+  // Same foreground notification pattern used in Student Records:
+  // one alert shortly before the event and one at the event time, with daily duplicate protection.
   useEffect(() => {
+    if (!schedules || !place || document.visibilityState !== 'visible') return;
     const currentTime = now.getTime();
-    const previousTime = lastTickRef.current;
-    lastTickRef.current = currentTime;
-    if (!schedules || !place || document.visibilityState !== 'visible' || currentTime - previousTime > 5000) return;
-    const due = schedules.today.events.find(({ id, at }) =>
-      id !== 'sunrise' && Number.isFinite(at.getTime()) && at.getTime() > previousTime &&
-      at.getTime() <= currentTime && currentTime - at.getTime() < 5000 &&
-      preferences.alerts[id as AlertPrayerId]
-    );
-    if (!due) return;
-    const eventKey = `${schedules.today.dateKey}:${due.id}`;
-    if (lastAlertRef.current === eventKey) return;
-    lastAlertRef.current = eventKey;
-    setMessage(`حان الآن وقت صلاة ${prayerNames[due.id]}`);
-    if (preferences.soundOn) void playAudio(due.id);
-    if (permission === 'granted' && 'serviceWorker' in navigator && navigator.serviceWorker.controller) {
-      void navigator.serviceWorker.ready.then((registration) => registration.showNotification(
-        `حان وقت صلاة ${prayerNames[due.id]}`,
-        { body: `بحسب ${place.name} · ${timeLabel(due.at, place.timeZone)}`, icon: `${import.meta.env.BASE_URL}icon-192.png`, tag: eventKey }
-      )).catch(() => {});
+    const dateKey = schedules.today.dateKey;
+    const marks = prayerAlertMarks(dateKey);
+    let changed = false;
+
+    for (const event of schedules.today.events) {
+      if (event.id === 'sunrise') continue;
+      const id = event.id as AlertPrayerId;
+      if (!preferences.alerts[id] || !Number.isFinite(event.at.getTime())) continue;
+
+      const prayerTime = event.at.getTime();
+      const beforeTime = prayerTime - 5 * 60_000;
+      const beforeKey = `${dateKey}|before5|${id}`;
+      const dueKey = `${dateKey}|due|${id}`;
+
+      if (currentTime >= beforeTime && currentTime < beforeTime + 60_000 && !marks.has(beforeKey)) {
+        marks.add(beforeKey);
+        changed = true;
+        setMessage(`باقي ٥ دقائق على صلاة ${prayerNames[id]}`);
+        if (permission === 'granted') {
+          void showPrayerNotification(
+            `باقي ٥ دقائق على صلاة ${prayerNames[id]}`,
+            `${place.name} · وقت الصلاة ${timeLabel(event.at, place.timeZone)}`,
+            beforeKey
+          );
+        }
+      }
+
+      if (currentTime >= prayerTime && currentTime < prayerTime + 60_000 && !marks.has(dueKey)) {
+        marks.add(dueKey);
+        changed = true;
+        setMessage(`حان الآن وقت صلاة ${prayerNames[id]}`);
+        if (preferences.soundOn) void playAudio(id);
+        if (permission === 'granted') {
+          void showPrayerNotification(
+            `حان وقت صلاة ${prayerNames[id]}`,
+            `بحسب ${place.name} · ${timeLabel(event.at, place.timeZone)}`,
+            dueKey
+          );
+        }
+      }
     }
-  }, [now, schedules, place, preferences, permission, playAudio]);
+
+    if (changed) savePrayerAlertMarks(marks);
+  }, [now, schedules, place, preferences.alerts, preferences.soundOn, permission, playAudio]);
 
   const useMyLocation = useCallback((quiet = false) => {
     if (!navigator.geolocation) { if (!quiet) setMessage('تحديد الموقع غير مدعوم في هذا المتصفح. اختر مدينة أو أدخل الإحداثيات.'); return; }
@@ -222,7 +288,7 @@ export default function App() {
       const result = await Notification.requestPermission();
       setPermission(result);
       setMessage(result === 'granted'
-        ? 'فُعّلت تنبيهات أثناء فتح التطبيق فقط. تنبيهات الخلفية تحتاج خدمة Push منفصلة.'
+        ? 'فُعّلت تنبيهات الصلاة: قبل الوقت بـ٥ دقائق وعند دخول الوقت أثناء تشغيل التطبيق.'
         : 'لم يُسمح بالإشعارات؛ يمكن تغييرها من إعدادات المتصفح أو الجهاز.');
     } catch {
       setMessage('للسماح بإشعارات iPhone، أضف التطبيق أولًا إلى الشاشة الرئيسية وافتحه منها.');
@@ -239,6 +305,21 @@ export default function App() {
 
   return (
     <div className="app-shell">
+      {updateView?.visible && <div className="update-overlay" role="status" aria-live="polite">
+        <div className="update-card">
+          <span className="update-icon"><RefreshCw size={26} /></span>
+          <div className="update-copy">
+            <span className="update-eyebrow">{updateView.version ? `الإصدار v${updateView.version}` : 'تحديث التطبيق'}</span>
+            <h2>{updateView.title}</h2>
+            <p>{updateView.status}</p>
+          </div>
+          <div className="update-progress-track" aria-label="تقدم تحديث التطبيق">
+            <span className="update-progress-fill" style={{ width: `${Math.max(0, Math.min(100, updateView.progress))}%` }} />
+          </div>
+          <div className="update-progress-meta"><span>{updateView.detail}</span><strong>{Math.round(updateView.progress).toLocaleString('ar-SA')}٪</strong></div>
+          {updateView.error && <button className="secondary-button wide" onClick={() => setUpdateView(null)}>متابعة بالإصدار الحالي</button>}
+        </div>
+      </div>}
       <main className="app-content">
         <header className="topbar">
           <div className="brand">
@@ -288,7 +369,7 @@ export default function App() {
 
         <section className="reality-card"><span className="reality-icon"><Info size={20} /></span><div><strong>تنبيه مهم بخصوص iPhone</strong><p>الصوت والتنبيه المباشر يعملان أثناء فتح التطبيق. عند إغلاقه أو قفل الشاشة لا نضمن وصول تنبيه أو تشغيل الأذان؛ إشعارات الخلفية تحتاج خدمة Push، والصوت الكامل يحتاج تطبيقًا أصليًا.</p><button className="text-action" onClick={() => setPanel('info')}>كيف يعمل التطبيق؟ <ChevronLeft size={15} /></button></div></section>
 
-        <footer className="footer"><span><ShieldCheck size={16} /> الحساب على جهازك · إحداثياتك لا تُرسل لخادم التطبيق</span><span>{online ? 'جاهز للعمل دون اتصال بعد أول تحميل' : <><WifiOff size={14} /> أنت غير متصل، المواقيت متاحة</>}</span><a href="https://github.com/ibr7h/prayer-time" target="_blank" rel="noreferrer">الشفرة والمصادر</a></footer>
+        <footer className="footer"><span><ShieldCheck size={16} /> الحساب على جهازك · إحداثياتك لا تُرسل لخادم التطبيق</span><span>{online ? 'جاهز للعمل دون اتصال بعد أول تحميل' : <><WifiOff size={14} /> أنت غير متصل، المواقيت متاحة</>}</span><span>الإصدار v{APP_VERSION}</span></footer>
       </main>
 
       {message && <div className="toast" role="status"><span>{message}</span><button onClick={() => setMessage('')} aria-label="إغلاق الرسالة"><X size={17} /></button></div>}
@@ -314,7 +395,8 @@ export default function App() {
             <div className="adjust-row"><div><strong>تصحيح الأوقات</strong><small>يُطبّق على الصلوات الخمس، لا الشروق</small></div><div className="stepper"><button aria-label="نقصان دقيقة" disabled={preferences.adjustment <= -30} onClick={() => updatePreferences({ adjustment: preferences.adjustment - 1 })}><Minus size={16} /></button><span dir="ltr">{preferences.adjustment > 0 ? '+' : ''}{preferences.adjustment} د</span><button aria-label="زيادة دقيقة" disabled={preferences.adjustment >= 30} onClick={() => updatePreferences({ adjustment: preferences.adjustment + 1 })}><Plus size={16} /></button></div></div>
             <div className="settings-divider" />
             <label className="switch-row"><span className="switch-icon"><Volume2 size={20} /></span><span><strong>صوت الأذان</strong><small>عندما يحين الوقت والتطبيق مفتوح</small></span><input aria-label="صوت الأذان" type="checkbox" checked={preferences.soundOn} onChange={(event) => updatePreferences({ soundOn: event.target.checked })} /><span className="switch-track" /></label>
-            <div className="notification-row"><span className="switch-icon"><Bell size={20} /></span><div><strong>إشعارات أثناء فتح التطبيق</strong><small>{permission === 'granted' ? 'مفعّلة، لكنها ليست إشعارات خلفية' : 'لـ iPhone: ثبّت التطبيق أولًا من Safari'}</small></div><button onClick={() => void requestNotifications()} disabled={permission === 'granted'}>{permission === 'granted' ? 'مفعّل' : 'تفعيل'}</button></div>
+            <div className="notification-row"><span className="switch-icon"><Bell size={20} /></span><div><strong>تنبيهات الصلاة</strong><small>{permission === 'granted' ? 'قبل الصلاة بـ٥ دقائق وعند دخول الوقت' : 'لـ iPhone: ثبّت التطبيق أولًا من Safari'}</small></div><button onClick={() => void requestNotifications()} disabled={permission === 'granted'}>{permission === 'granted' ? 'مفعّل' : 'تفعيل'}</button></div>
+            <div className="notification-row"><span className="switch-icon"><RefreshCw size={20} /></span><div><strong>تحديث التطبيق</strong><small>الإصدار v{APP_VERSION} · فحص تلقائي عند الفتح والعودة للتطبيق</small></div><button onClick={() => void updaterRef.current?.check(true)}>فحص</button></div>
             <h3 className="sheet-section-title">الصلاة المشمولة بالتنبيه</h3><div className="alert-grid">{alertIds.map((id) => <label key={id} className="alert-choice"><input type="checkbox" checked={preferences.alerts[id]} onChange={() => toggleAlert(id)} /><span>{prayerNames[id]}</span><Check size={15} /></label>)}</div>
             <p className="fine-print">عند شهر رمضان، تُضاف ٣٠ دقيقة لعشاء طريقة أم القرى تلقائيًا. راجع تقويم مسجدك.</p>
           </div>}
@@ -322,7 +404,7 @@ export default function App() {
           {panel === 'info' && <div className="sheet-body info-body">
             <div className="info-item"><span><MapPin size={20} /></span><div><strong>موقعك وخصوصيتك</strong><p>المواقيت تُحسب على الجهاز من إحداثياتك ولا نرسلها إلى خادم التطبيق. يُحدّث الموقع عند الفتح إن كنت قد أذنت به. للمواقع خارج السعودية، تأكد أن توقيت الجهاز يطابق المكان.</p></div></div>
             <div className="info-item"><span><Headphones size={20} /></span><div><strong>الأذان الصوتي</strong><p>اضغط تشغيل بجانب الصلاة لتجربة الصوت. يمكن للتطبيق محاولة تشغيله عند دخول الوقت أثناء فتحه، لكن المتصفح قد يمنع التشغيل التلقائي.</p></div></div>
-            <div className="info-item"><span><BellRing size={20} /></span><div><strong>عند قفل الآيفون</strong><p>هذه النسخة لا تُرسل تنبيه خلفية؛ لذلك لا تعتمد عليها منبّهًا وحيدًا للصلاة. إضافة Web Push لاحقًا تحتاج خادمًا، والتشغيل الكامل للأذان في الخلفية يحتاج تطبيقًا أصليًا.</p></div></div>
+            <div className="info-item"><span><BellRing size={20} /></span><div><strong>تنبيهات الصلاة</strong><p>أثناء تشغيل التطبيق يظهر تنبيه قبل الصلاة بـ٥ دقائق ثم تنبيه عند دخول الوقت، مع منع تكرارهما في اليوم نفسه. عند إغلاق التطبيق أو قفل الآيفون لا تُضمن هذه التنبيهات؛ Web Push أو التطبيق الأصلي مطلوبان للعمل الخلفي الموثوق.</p></div></div>
             <div className="info-item"><span><Smartphone size={20} /></span><div><strong>إضافة التطبيق للآيفون</strong><p>بعد نشره عبر HTTPS، افتح الرابط في Safari ثم اختر «مشاركة ← إضافة إلى الشاشة الرئيسية». بعد أول تحميل تصبح الحسابات والصوت متاحة دون إنترنت.</p></div></div>
             <span className="install-status">{standalone() ? 'التطبيق مفتوح من الشاشة الرئيسية' : 'تعمل الآن في المتصفح؛ يمكنك إضافته للشاشة الرئيسية بعد نشره'}</span>
           </div>}
