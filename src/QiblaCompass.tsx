@@ -20,6 +20,60 @@ export function signedBearingDelta(target: number, current: number): number {
   return ((target - current + 540) % 360) - 180;
 }
 
+export function smoothSensorHeading(
+  previous: number | null,
+  next: number,
+  accuracy: number | null
+): number {
+  if (previous === null) return normalizeDegrees(next);
+  const delta = signedBearingDelta(next, previous);
+  const magnitude = Math.abs(delta);
+
+  const deadZone = accuracy === null
+    ? 0.35
+    : Math.min(1.1, Math.max(0.3, accuracy * 0.035));
+
+  if (magnitude <= deadZone) return previous;
+
+  const alpha = magnitude > 45
+    ? 0.62
+    : magnitude > 18
+      ? 0.46
+      : magnitude > 7
+        ? 0.3
+        : accuracy !== null && accuracy > 15
+          ? 0.14
+          : 0.2;
+
+  return normalizeDegrees(previous + delta * alpha);
+}
+
+export function animateHeadingStep(
+  current: number,
+  target: number,
+  accuracy: number | null
+): number {
+  const delta = signedBearingDelta(target, current);
+  const magnitude = Math.abs(delta);
+  const deadZone = accuracy === null
+    ? 0.18
+    : Math.min(0.7, Math.max(0.18, accuracy * 0.02));
+
+  if (magnitude <= deadZone) return current;
+
+  const alpha = magnitude > 50
+    ? 0.28
+    : magnitude > 20
+      ? 0.2
+      : magnitude > 7
+        ? 0.13
+        : 0.075;
+
+  const maxStep = magnitude > 45 ? 7 : magnitude > 15 ? 4.5 : 2.6;
+  const step = Math.max(-maxStep, Math.min(maxStep, delta * alpha));
+  return normalizeDegrees(current + step);
+}
+
 export function headingFromOrientation(event: CompassOrientationEvent): {
   heading: number;
   accuracy: number | null;
@@ -37,8 +91,6 @@ export function headingFromOrientation(event: CompassOrientationEvent): {
 
   if (event.absolute && Number.isFinite(event.alpha)) {
     return {
-      // Absolute alpha is 0° at north and increases counter-clockwise.
-      // Compass headings increase clockwise, so invert alpha.
       heading: normalizeDegrees(360 - (event.alpha as number)),
       accuracy: null,
       absolute: true
@@ -69,30 +121,67 @@ export default function QiblaCompass({ bearing, placeName }: {
   const [accuracy, setAccuracy] = useState<number | null>(null);
   const [tilted, setTilted] = useState(false);
   const [portrait, setPortrait] = useState(screenIsPortrait);
+  const [aligned, setAligned] = useState(false);
+
   const absoluteSeenRef = useRef(false);
   const alignedRef = useRef(false);
+  const targetHeadingRef = useRef<number | null>(null);
+  const animatedHeadingRef = useRef<number | null>(null);
+  const accuracyRef = useRef<number | null>(null);
 
   const handleOrientation = useCallback((event: Event) => {
     const orientation = event as CompassOrientationEvent;
     if (event.type === 'deviceorientationabsolute') absoluteSeenRef.current = true;
-    if (event.type === 'deviceorientation' && absoluteSeenRef.current &&
-      !Number.isFinite(orientation.webkitCompassHeading)) return;
+    if (
+      event.type === 'deviceorientation' &&
+      absoluteSeenRef.current &&
+      !Number.isFinite(orientation.webkitCompassHeading)
+    ) return;
 
     const result = headingFromOrientation(orientation);
     if (!result) return;
 
-    setHeading((previous) => {
-      if (previous === null) return result.heading;
-      const delta = signedBearingDelta(result.heading, previous);
-      return normalizeDegrees(previous + delta * 0.22);
+    accuracyRef.current = result.accuracy;
+    targetHeadingRef.current = smoothSensorHeading(
+      targetHeadingRef.current,
+      result.heading,
+      result.accuracy
+    );
+
+    setAccuracy((previous) => {
+      if (result.accuracy === null) return previous === null ? null : previous;
+      if (previous === null || Math.abs(previous - result.accuracy) >= 1.5) return result.accuracy;
+      return previous;
     });
-    setAccuracy(result.accuracy);
+
     setTilted(
       (Number.isFinite(orientation.beta) && Math.abs(orientation.beta as number) > 25) ||
       (Number.isFinite(orientation.gamma) && Math.abs(orientation.gamma as number) > 25)
     );
     setState('listening');
   }, []);
+
+  useEffect(() => {
+    if (state !== 'listening') return;
+
+    let frame = 0;
+    const animate = () => {
+      const target = targetHeadingRef.current;
+      if (target !== null) {
+        const current = animatedHeadingRef.current ?? target;
+        const next = animateHeadingStep(current, target, accuracyRef.current);
+        animatedHeadingRef.current = next;
+        setHeading((previous) => {
+          if (previous !== null && Math.abs(signedBearingDelta(next, previous)) < 0.04) return previous;
+          return next;
+        });
+      }
+      frame = window.requestAnimationFrame(animate);
+    };
+
+    frame = window.requestAnimationFrame(animate);
+    return () => window.cancelAnimationFrame(frame);
+  }, [state]);
 
   useEffect(() => {
     if (state !== 'listening') return;
@@ -129,9 +218,15 @@ export default function QiblaCompass({ bearing, placeName }: {
           return;
         }
       }
+
       absoluteSeenRef.current = false;
+      targetHeadingRef.current = null;
+      animatedHeadingRef.current = null;
+      accuracyRef.current = null;
       setHeading(null);
       setAccuracy(null);
+      setAligned(false);
+      alignedRef.current = false;
       setState('listening');
     } catch {
       setState('error');
@@ -139,7 +234,16 @@ export default function QiblaCompass({ bearing, placeName }: {
   };
 
   const delta = heading === null ? null : signedBearingDelta(bearing, heading);
-  const aligned = delta !== null && Math.abs(delta) <= 3 && !tilted && portrait;
+
+  useEffect(() => {
+    if (delta === null || tilted || !portrait) {
+      setAligned(false);
+      return;
+    }
+
+    const magnitude = Math.abs(delta);
+    setAligned((previous) => previous ? magnitude <= 5 : magnitude <= 2.5);
+  }, [delta, tilted, portrait]);
 
   useEffect(() => {
     if (aligned && !alignedRef.current) navigator.vibrate?.(35);
@@ -188,7 +292,11 @@ export default function QiblaCompass({ bearing, placeName }: {
 
       <div className={`qibla-guidance${aligned ? ' is-aligned' : ''}`} role="status" aria-live="polite">
         <strong>{instruction}</strong>
-        {heading !== null && <small>اتجاه الهاتف <b dir="ltr">{Math.round(heading)}°</b> · {qualityLabel(accuracy)}</small>}
+        {heading !== null && (
+          <small>
+            اتجاه الهاتف <b dir="ltr">{Math.round(heading)}°</b> · {qualityLabel(accuracy)}
+          </small>
+        )}
       </div>
 
       {!portrait && <div className="compass-warning"><Smartphone size={17} /> استخدم الهاتف بالوضع العمودي للحصول على اتجاه أوضح.</div>}
