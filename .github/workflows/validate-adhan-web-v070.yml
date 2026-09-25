@@ -1,0 +1,34 @@
+name: Validate Adhan Web v0.7.0
+on:
+  push:
+    branches: [adhan-control-native-sound-v0.7.0]
+    paths:
+      - '.github/workflows/validate-adhan-web-v070.yml'
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - run: npm run build -- --mode capacitor
+      - name: Verify WAV duration and format
+        run: |
+          python - <<'PY'
+          import wave
+          for path in ('native/sounds/adhan_default_short.wav','native/sounds/adhan_fajr_short.wav'):
+              with wave.open(path, 'rb') as f:
+                  duration = f.getnframes() / f.getframerate()
+                  assert 23.8 <= duration <= 24.2, (path, duration)
+                  assert f.getnchannels() == 1, (path, f.getnchannels())
+                  assert f.getsampwidth() == 2, (path, f.getsampwidth())
+                  print(path, duration, f.getframerate(), f.getnchannels())
+          PY
