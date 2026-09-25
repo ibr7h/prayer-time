@@ -43,4 +43,11 @@ describe('phone app interactions', () => {
     expect(screen.getByRole('button', { name: 'تشغيل البوصلة' })).toBeTruthy();
   });
 
+  it('shows a notification test action in settings for the PWA too', () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'إعدادات التطبيق' }));
+    expect(screen.getByRole('button', { name: 'اختبار' })).toBeTruthy();
+    expect(screen.getByText('اختبار التنبيه')).toBeTruthy();
+  });
+
 });
