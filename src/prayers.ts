@@ -29,6 +29,7 @@ export interface Preferences {
   madhab: MadhabId;
   adjustment: number;
   soundOn: boolean;
+  preventRepeatAlerts: boolean;
   alerts: Record<AlertPrayerId, boolean>;
 }
 
@@ -37,6 +38,7 @@ export const defaultPreferences: Preferences = {
   madhab: 'shafi',
   adjustment: 0,
   soundOn: true,
+  preventRepeatAlerts: true,
   alerts: { fajr: true, dhuhr: true, asr: true, maghrib: true, isha: true }
 };
 
