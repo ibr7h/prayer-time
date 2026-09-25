@@ -9,6 +9,7 @@ import {
 } from './QiblaCompass';
 
 type HeadingState = 'idle' | 'listening' | 'denied' | 'unsupported' | 'error';
+type BaseMap = 'satellite' | 'street';
 
 type OrientationPermissionConstructor = typeof DeviceOrientationEvent & {
   requestPermission?: () => Promise<'granted' | 'denied'>;
@@ -19,19 +20,43 @@ type CompassOrientationEvent = DeviceOrientationEvent & {
   webkitCompassAccuracy?: number;
 };
 
-function mapBounds(place: Place): string {
-  const latSpan = 0.012;
+function mapBounds(place: Place, latSpan = 0.0075) {
   const cosLat = Math.max(0.35, Math.cos(place.latitude * Math.PI / 180));
   const lonSpan = latSpan / cosLat;
-  const left = place.longitude - lonSpan;
-  const right = place.longitude + lonSpan;
-  const bottom = place.latitude - latSpan;
-  const top = place.latitude + latSpan;
-  return [left, bottom, right, top].map((value) => value.toFixed(6)).join('%2C');
+  return {
+    left: place.longitude - lonSpan,
+    right: place.longitude + lonSpan,
+    bottom: place.latitude - latSpan,
+    top: place.latitude + latSpan
+  };
+}
+
+function encodedBounds(place: Place): string {
+  const bounds = mapBounds(place);
+  return [bounds.left, bounds.bottom, bounds.right, bounds.top]
+    .map((value) => value.toFixed(6))
+    .join('%2C');
 }
 
 function osmEmbedUrl(place: Place): string {
-  return `https://www.openstreetmap.org/export/embed.html?bbox=${mapBounds(place)}&layer=mapnik&marker=${place.latitude.toFixed(6)}%2C${place.longitude.toFixed(6)}`;
+  return `https://www.openstreetmap.org/export/embed.html?bbox=${encodedBounds(place)}&layer=mapnik`;
+}
+
+function satelliteImageUrl(place: Place): string {
+  const bounds = mapBounds(place);
+  const params = new URLSearchParams({
+    bbox: [bounds.left, bounds.bottom, bounds.right, bounds.top]
+      .map((value) => value.toFixed(6))
+      .join(','),
+    bboxSR: '4326',
+    imageSR: '3857',
+    size: '1400,1400',
+    format: 'jpg',
+    dpi: '96',
+    transparent: 'false',
+    f: 'image'
+  });
+  return `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?${params.toString()}`;
 }
 
 function accuracyLabel(value: number | null): string {
@@ -51,6 +76,8 @@ export default function QiblaMap({ place, bearing }: {
   const [accuracy, setAccuracy] = useState<number | null>(null);
   const [tilted, setTilted] = useState(false);
   const [aligned, setAligned] = useState(false);
+  const [baseMap, setBaseMap] = useState<BaseMap>('satellite');
+  const [satelliteFailed, setSatelliteFailed] = useState(false);
 
   const targetHeadingRef = useRef<number | null>(null);
   const animatedHeadingRef = useRef<number | null>(null);
@@ -168,18 +195,41 @@ export default function QiblaMap({ place, bearing }: {
   const mapRotation = heading === null ? 0 : -heading;
   const courseClass = heading === null ? 'is-neutral' : aligned ? 'is-aligned' : 'is-off-course';
 
+  const showStreetMap = () => setBaseMap('street');
+  const showSatelliteMap = () => {
+    setSatelliteFailed(false);
+    setBaseMap('satellite');
+  };
+
   return (
     <div className="qibla-map-mode">
       <div className={`qibla-map-stage ${courseClass}`}>
         {online ? (
-          <iframe
-            className="qibla-map-rotating-layer"
-            title="خريطة موقعك واتجاه القبلة"
-            src={osmEmbedUrl(place)}
-            loading="lazy"
-            referrerPolicy="no-referrer"
-            style={{ transform: `translate(-50%, -50%) rotate(${mapRotation}deg)` }}
-          />
+          <>
+            {baseMap === 'satellite' ? (
+              <img
+                className="qibla-map-rotating-layer qibla-map-satellite-layer"
+                src={satelliteImageUrl(place)}
+                alt=""
+                aria-hidden="true"
+                referrerPolicy="no-referrer"
+                style={{ transform: `translate(-50%, -50%) rotate(${mapRotation}deg)` }}
+                onError={() => {
+                  setSatelliteFailed(true);
+                  setBaseMap('street');
+                }}
+              />
+            ) : (
+              <iframe
+                className="qibla-map-rotating-layer"
+                title="خريطة موقعك واتجاه القبلة"
+                src={osmEmbedUrl(place)}
+                loading="lazy"
+                referrerPolicy="no-referrer"
+                style={{ transform: `translate(-50%, -50%) rotate(${mapRotation}deg)` }}
+              />
+            )}
+          </>
         ) : (
           <div className="qibla-map-offline"><WifiOff size={30} /><strong>الخريطة تحتاج اتصالًا بالإنترنت</strong><span>يبقى اتجاه القبلة المحسوب متاحًا.</span></div>
         )}
@@ -192,6 +242,27 @@ export default function QiblaMap({ place, bearing }: {
         <div className={`map-sensor-chip ${accuracy !== null && accuracy > 20 ? 'weak' : ''}`}>
           <span>{accuracyLabel(accuracy)}</span>
         </div>
+
+        <div className="map-style-toggle" role="group" aria-label="نوع الخريطة">
+          <button
+            className={baseMap === 'satellite' ? 'active' : ''}
+            aria-pressed={baseMap === 'satellite'}
+            onClick={showSatelliteMap}
+          >
+            قمر صناعي
+          </button>
+          <button
+            className={baseMap === 'street' ? 'active' : ''}
+            aria-pressed={baseMap === 'street'}
+            onClick={showStreetMap}
+          >
+            شوارع
+          </button>
+        </div>
+
+        {satelliteFailed && (
+          <div className="map-provider-warning">تعذّر تحميل صورة القمر الصناعي؛ تم التحويل إلى خريطة الشوارع.</div>
+        )}
 
         <div
           className={`map-heading-rose ${courseClass}`}
@@ -232,9 +303,15 @@ export default function QiblaMap({ place, bearing }: {
         </div>
 
         {tilted && <div className="map-tilt-warning"><RotateCcw size={16} /> ضع الهاتف بشكل أقرب إلى الوضع الأفقي لتحسين دقة الاتجاه.</div>}
+
+        <div className="map-attribution">
+          {baseMap === 'satellite'
+            ? 'Esri · Maxar · Earthstar Geographics · GIS User Community'
+            : '© OpenStreetMap contributors'}
+        </div>
       </div>
 
-      <div className="compass-note map-note"><ShieldCheck size={16} /><span>عند تشغيل اتجاه الخريطة يصبح أعلى الشاشة هو اتجاه مقدمة الهاتف، وتدور الخريطة والجهات حول موقعك. خريطة OpenStreetMap تُحمّل من الإنترنت.</span></div>
+      <div className="compass-note map-note"><ShieldCheck size={16} /><span>عند تشغيل اتجاه الخريطة يصبح أعلى الشاشة هو اتجاه مقدمة الهاتف. وضع القمر الصناعي يحمّل صورة المنطقة من خدمة Esri World Imagery، ووضع الشوارع يستخدم OpenStreetMap.</span></div>
     </div>
   );
 }
