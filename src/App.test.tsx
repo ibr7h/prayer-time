@@ -46,8 +46,10 @@ describe('phone app interactions', () => {
   it('shows notification and adhan controls in settings', () => {
     render(<App />);
     fireEvent.click(screen.getByRole('button', { name: 'إعدادات التطبيق' }));
-    expect(screen.getByRole('button', { name: 'اختبار' })).toBeTruthy();
-    expect(screen.getByText('اختبار التنبيه')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'اختبار النظام' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'اختبار داخل التطبيق' })).toBeTruthy();
+    expect(screen.getByText('اختبار إشعار النظام')).toBeTruthy();
+    expect(screen.getByText('اختبار وقت الصلاة داخل التطبيق')).toBeTruthy();
     expect(screen.getByText('صوت الأذان عند دخول الوقت')).toBeTruthy();
     expect(screen.getByRole('checkbox', { name: 'صوت الأذان' })).toBeTruthy();
   });
