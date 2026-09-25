@@ -54,6 +54,8 @@ describe('phone app interactions', () => {
     expect(screen.getByText('صوت الأذان عند دخول الوقت')).toBeTruthy();
     expect(screen.getByText(/سيُهيأ عند أول لمسة/)).toBeTruthy();
     expect(screen.getByRole('checkbox', { name: 'صوت الأذان' })).toBeTruthy();
+    expect(screen.getByLabelText('حالة التنبيهات')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'إعادة الفحص الآن' })).toBeTruthy();
   });
 
 });
