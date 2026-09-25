@@ -12,6 +12,7 @@ import {
 import { loadState, saveState } from './storage';
 import QiblaScreen from './QiblaScreen';
 import { APP_VERSION, startAppUpdater, type AppUpdater, type UpdateView } from './updater';
+import { shouldShowBeforeAlert, shouldShowDueAlert } from './foregroundAlerts';
 import {
   getNativeNotificationPermission, isNativeNotificationPlatform,
   requestNativeNotificationPermission, schedulePrayerNotifications,
@@ -118,7 +119,6 @@ export default function App() {
   );
   const [coordinates, setCoordinates] = useState({ lat: '', lon: '' });
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const foregroundTestTimerRef = useRef<number | null>(null);
   const updaterRef = useRef<AppUpdater | null>(null);
   const [updateView, setUpdateView] = useState<UpdateView | null>(null);
 
@@ -158,12 +158,6 @@ export default function App() {
     const timeout = window.setTimeout(() => setForegroundAlert(null), 12000);
     return () => window.clearTimeout(timeout);
   }, [foregroundAlert]);
-
-  useEffect(() => () => {
-    if (foregroundTestTimerRef.current !== null) {
-      window.clearTimeout(foregroundTestTimerRef.current);
-    }
-  }, []);
 
   useEffect(() => {
     if (panel === 'location') {
@@ -252,7 +246,7 @@ export default function App() {
       const beforeKey = `${dateKey}|before5|${id}`;
       const dueKey = `${dateKey}|due|${id}`;
 
-      if (currentTime >= beforeTime && currentTime < beforeTime + 60_000 && !marks.has(beforeKey)) {
+      if (shouldShowBeforeAlert(currentTime, prayerTime) && !marks.has(beforeKey)) {
         marks.add(beforeKey);
         changed = true;
         setForegroundAlert({
@@ -271,7 +265,7 @@ export default function App() {
         }
       }
 
-      if (currentTime >= prayerTime && currentTime < prayerTime + 60_000 && !marks.has(dueKey)) {
+      if (shouldShowDueAlert(currentTime, prayerTime) && !marks.has(dueKey)) {
         marks.add(dueKey);
         changed = true;
         setForegroundAlert({
@@ -440,25 +434,18 @@ export default function App() {
   };
 
   const testForegroundPrayerAlert = () => {
-    if (foregroundTestTimerRef.current !== null) {
-      window.clearTimeout(foregroundTestTimerRef.current);
-    }
     setPanel(null);
-    setMessage('سيظهر اختبار وقت الصلاة داخل التطبيق خلال ٥ ثوانٍ.');
-    foregroundTestTimerRef.current = window.setTimeout(() => {
-      foregroundTestTimerRef.current = null;
-      const candidate = upcoming?.id && upcoming.id !== 'sunrise'
-        ? upcoming.id as AlertPrayerId
-        : 'fajr';
-      setForegroundAlert({
-        kind: 'due',
-        prayerId: candidate,
-        title: `اختبار · حان الآن وقت صلاة ${prayerNames[candidate]}`,
-        detail: 'هذا هو التنبيه الذي سيظهر عندما يكون ميقاتي مفتوحًا.',
-        isTest: true
-      });
-      if (preferences.soundOn) void playAudio(candidate);
-    }, 5000);
+    const candidate = upcoming?.id && upcoming.id !== 'sunrise'
+      ? upcoming.id as AlertPrayerId
+      : 'fajr';
+    setForegroundAlert({
+      kind: 'due',
+      prayerId: candidate,
+      title: `اختبار · حان الآن وقت صلاة ${prayerNames[candidate]}`,
+      detail: 'هذا هو التنبيه الذي سيظهر عندما يكون ميقاتي مفتوحًا.',
+      isTest: true
+    });
+    if (preferences.soundOn) void playAudio(candidate);
   };
 
   const notificationGranted = nativeNotifications
@@ -595,7 +582,7 @@ export default function App() {
             <label className="switch-row"><span className="switch-icon"><Volume2 size={20} strokeWidth={1.8} /></span><span><strong>صوت الأذان عند دخول الوقت</strong><small>{nativeNotifications ? 'أذان كامل داخل التطبيق · مقطع قصير عند القفل' : 'أذان كامل عندما يكون ميقاتي مفتوحًا'}</small></span><input aria-label="صوت الأذان" type="checkbox" checked={preferences.soundOn} onChange={(event) => updatePreferences({ soundOn: event.target.checked })} /><span className="switch-track" /></label>
             <div className="notification-row"><span className="switch-icon"><Bell size={20} strokeWidth={1.8} /></span><div><strong>تنبيهات الصلاة</strong><small>{nativeNotifications ? (nativePermission === 'granted' ? 'Native · تعمل عند قفل الشاشة · جدولة ٥ أيام' : nativePermission === 'denied' ? 'الإذن مرفوض من إعدادات الجهاز' : 'تنبيهات محلية أصلية لـ iPhone وAndroid') : (permission === 'granted' ? 'قبل الصلاة بـ٥ دقائق وعند دخول الوقت أثناء تشغيل PWA' : 'لـ iPhone PWA: ثبّت التطبيق أولًا من Safari')}</small></div><button onClick={() => void requestNotifications()} disabled={notificationGranted}>{notificationGranted ? 'مفعّل' : 'تفعيل'}</button></div>
             <div className="notification-row"><span className="switch-icon"><BellRing size={20} strokeWidth={1.8} /></span><div><strong>اختبار إشعار النظام</strong><small>{nativeNotifications ? 'تنبيه تجريبي بعد ٥ ثوانٍ لاختبار القفل والخلفية' : permission === 'granted' ? 'إرسال إشعار نظام تجريبي الآن' : 'سيطلب إذن الإشعارات ثم يرسل اختبارًا'}</small></div><button onClick={() => void testNotification()}>اختبار النظام</button></div>
-            <div className="notification-row"><span className="switch-icon"><Clock3 size={20} strokeWidth={1.8} /></span><div><strong>اختبار وقت الصلاة داخل التطبيق</strong><small>بعد ٥ ثوانٍ يظهر تنبيه الصلاة نفسه ويبدأ الأذان إذا كان الصوت مفعّلًا</small></div><button onClick={testForegroundPrayerAlert}>اختبار داخل التطبيق</button></div>
+            <div className="notification-row"><span className="switch-icon"><Clock3 size={20} strokeWidth={1.8} /></span><div><strong>اختبار وقت الصلاة داخل التطبيق</strong><small>يظهر التنبيه فورًا ويبدأ الأذان إذا كان الصوت مفعّلًا</small></div><button onClick={testForegroundPrayerAlert}>اختبار داخل التطبيق</button></div>
             <div className="notification-row"><span className="switch-icon"><RefreshCw size={20} strokeWidth={1.8} /></span><div><strong>تحديث التطبيق</strong><small>الإصدار v{APP_VERSION} · فحص تلقائي عند الفتح والعودة للتطبيق</small></div><button onClick={() => void updaterRef.current?.check(true)}>فحص</button></div>
             <h3 className="sheet-section-title">الصلاة المشمولة بالتنبيه</h3><div className="alert-grid">{alertIds.map((id) => <label key={id} className="alert-choice"><input type="checkbox" checked={preferences.alerts[id]} onChange={() => toggleAlert(id)} /><span>{prayerNames[id]}</span><Check size={15} /></label>)}</div>
             <p className="fine-print">عند شهر رمضان، تُضاف ٣٠ دقيقة لعشاء طريقة أم القرى تلقائيًا. راجع تقويم مسجدك.</p>
