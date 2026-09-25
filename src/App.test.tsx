@@ -54,6 +54,11 @@ describe('phone app interactions', () => {
     expect(screen.getByText('صوت الأذان عند دخول الوقت')).toBeTruthy();
     expect(screen.getByText(/سيُهيأ عند أول لمسة/)).toBeTruthy();
     expect(screen.getByRole('checkbox', { name: 'صوت الأذان' })).toBeTruthy();
+    const repeatProtection = screen.getByRole('checkbox', { name: 'منع تكرار التنبيه' }) as HTMLInputElement;
+    expect(repeatProtection.checked).toBe(true);
+    fireEvent.click(repeatProtection);
+    expect(repeatProtection.checked).toBe(false);
+    expect(screen.getByText(/وضع اختبار لإعادة المرور بوقت الصلاة/)).toBeTruthy();
     expect(screen.getByLabelText('حالة التنبيهات')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'إعادة الفحص الآن' })).toBeTruthy();
   });
