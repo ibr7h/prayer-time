@@ -112,6 +112,10 @@ export default function App() {
   const [playing, setPlaying] = useState<PrayerId | null>(null);
   const [audioReady, setAudioReady] = useState(false);
   const [online, setOnline] = useState(navigator.onLine);
+  const [lifecycleCheck, setLifecycleCheck] = useState(() => ({
+    at: Date.now(),
+    reason: 'فتح التطبيق'
+  }));
   const [permission, setPermission] = useState(
     typeof Notification === 'undefined' ? 'unsupported' : Notification.permission
   );
@@ -127,15 +131,30 @@ export default function App() {
 
   useEffect(() => saveState(stored), [stored]);
   useEffect(() => {
-    const interval = window.setInterval(() => setNow(new Date()), 1000);
-    const visible = () => setNow(new Date());
+    const refreshClock = (reason: string) => {
+      const current = new Date();
+      setNow(current);
+      setLifecycleCheck({ at: current.getTime(), reason });
+    };
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') setNow(new Date());
+    }, 1000);
+    const visible = () => {
+      if (document.visibilityState === 'visible') refreshClock('العودة للواجهة');
+    };
+    const focus = () => refreshClock('استعادة التركيز');
+    const pageShow = () => refreshClock('استعادة الصفحة');
     const network = () => setOnline(navigator.onLine);
     document.addEventListener('visibilitychange', visible);
+    window.addEventListener('focus', focus);
+    window.addEventListener('pageshow', pageShow);
     window.addEventListener('online', network);
     window.addEventListener('offline', network);
     return () => {
       clearInterval(interval);
       document.removeEventListener('visibilitychange', visible);
+      window.removeEventListener('focus', focus);
+      window.removeEventListener('pageshow', pageShow);
       window.removeEventListener('online', network);
       window.removeEventListener('offline', network);
     };
@@ -533,6 +552,13 @@ export default function App() {
     });
   };
 
+  const forceForegroundCheck = () => {
+    const current = new Date();
+    setNow(current);
+    setLifecycleCheck({ at: current.getTime(), reason: 'فحص يدوي' });
+    setMessage('تمت إعادة فحص وقت الصلاة وحالة التنبيه الآن.');
+  };
+
   const notificationGranted = nativeNotifications
     ? nativePermission === 'granted'
     : permission === 'granted';
@@ -677,6 +703,14 @@ export default function App() {
             <div className="notification-row"><span className="switch-icon"><Bell size={20} strokeWidth={1.8} /></span><div><strong>تنبيهات الصلاة</strong><small>{nativeNotifications ? (nativePermission === 'granted' ? 'Native · تعمل عند قفل الشاشة · جدولة ٥ أيام' : nativePermission === 'denied' ? 'الإذن مرفوض من إعدادات الجهاز' : 'تنبيهات محلية أصلية لـ iPhone وAndroid') : (permission === 'granted' ? 'قبل الصلاة بـ٥ دقائق وعند دخول الوقت أثناء تشغيل PWA' : 'لـ iPhone PWA: ثبّت التطبيق أولًا من Safari')}</small></div><button onClick={() => void requestNotifications()} disabled={notificationGranted}>{notificationGranted ? 'مفعّل' : 'تفعيل'}</button></div>
             <div className="notification-row"><span className="switch-icon"><BellRing size={20} strokeWidth={1.8} /></span><div><strong>اختبار إشعار النظام</strong><small>{nativeNotifications ? 'تنبيه تجريبي بعد ٥ ثوانٍ لاختبار القفل والخلفية' : permission === 'granted' ? 'إرسال إشعار نظام تجريبي الآن' : 'سيطلب إذن الإشعارات ثم يرسل اختبارًا'}</small></div><button onClick={() => void testNotification()}>اختبار النظام</button></div>
             <div className="notification-row"><span className="switch-icon"><Clock3 size={20} strokeWidth={1.8} /></span><div><strong>اختبار وقت الصلاة داخل التطبيق</strong><small>يظهر التنبيه فورًا ويبدأ الأذان إذا كان الصوت مفعّلًا</small></div><button onClick={testForegroundPrayerAlert}>اختبار داخل التطبيق</button></div>
+            <div className="notification-health" aria-label="حالة التنبيهات">
+              <div><span>الواجهة</span><strong>{document.visibilityState === 'visible' ? 'نشطة' : 'في الخلفية'}</strong></div>
+              <div><span>إذن الإشعارات</span><strong>{notificationGranted ? 'مفعّل' : 'غير مفعّل'}</strong></div>
+              <div><span>الصوت</span><strong>{preferences.soundOn ? (audioReady ? 'مهيأ' : 'يحتاج لمسة') : 'متوقف'}</strong></div>
+              <div><span>آخر فحص</span><strong>{new Intl.DateTimeFormat('ar-SA', { hour: 'numeric', minute: '2-digit', second: '2-digit' }).format(new Date(lifecycleCheck.at))}</strong></div>
+              <small>{lifecycleCheck.reason}</small>
+              <button type="button" onClick={forceForegroundCheck}>إعادة الفحص الآن</button>
+            </div>
             <div className="notification-row"><span className="switch-icon"><RefreshCw size={20} strokeWidth={1.8} /></span><div><strong>تحديث التطبيق</strong><small>الإصدار v{APP_VERSION} · فحص تلقائي عند الفتح والعودة للتطبيق</small></div><button onClick={() => void updaterRef.current?.check(true)}>فحص</button></div>
             <h3 className="sheet-section-title">الصلاة المشمولة بالتنبيه</h3><div className="alert-grid">{alertIds.map((id) => <label key={id} className="alert-choice"><input type="checkbox" checked={preferences.alerts[id]} onChange={() => toggleAlert(id)} /><span>{prayerNames[id]}</span><Check size={15} /></label>)}</div>
             <p className="fine-print">عند شهر رمضان، تُضاف ٣٠ دقيقة لعشاء طريقة أم القرى تلقائيًا. راجع تقويم مسجدك.</p>
