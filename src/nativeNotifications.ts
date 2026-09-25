@@ -21,6 +21,38 @@ export interface NativeScheduleSummary {
 const DAYS_TO_SCHEDULE = 5;
 const PRAYER_IDS: AlertPrayerId[] = ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha'];
 const PRAYER_MARK = 'miqati-prayer';
+const ADHAN_DEFAULT_SOUND = 'adhan_default_short.wav';
+const ADHAN_FAJR_SOUND = 'adhan_fajr_short.wav';
+const ANDROID_ADHAN_CHANNEL = 'miqati-adhan-v1';
+const ANDROID_FAJR_CHANNEL = 'miqati-fajr-adhan-v1';
+const ANDROID_SILENT_CHANNEL = 'miqati-silent-v1';
+
+async function ensureAndroidChannels(): Promise<void> {
+  if (Capacitor.getPlatform() !== 'android') return;
+  await LocalNotifications.createChannel({
+    id: ANDROID_ADHAN_CHANNEL,
+    name: 'أذان وقت الصلاة',
+    description: 'مقطع أذان قصير عند دخول وقت الصلاة',
+    sound: ADHAN_DEFAULT_SOUND,
+    importance: 4,
+    vibration: true
+  });
+  await LocalNotifications.createChannel({
+    id: ANDROID_FAJR_CHANNEL,
+    name: 'أذان الفجر',
+    description: 'مقطع أذان قصير عند دخول وقت الفجر',
+    sound: ADHAN_FAJR_SOUND,
+    importance: 4,
+    vibration: true
+  });
+  await LocalNotifications.createChannel({
+    id: ANDROID_SILENT_CHANNEL,
+    name: 'تنبيهات صامتة',
+    description: 'تنبيهات ميقاتي بدون صوت',
+    importance: 3,
+    vibration: false
+  });
+}
 
 function shiftedCivilDay(
   civil: { year: number; month: number; day: number },
@@ -94,13 +126,27 @@ function makeNotification(
   preferences: Preferences
 ): LocalNotificationSchema {
   const platform = Capacitor.getPlatform();
+  const dueSound = prayerId === 'fajr' ? ADHAN_FAJR_SOUND : ADHAN_DEFAULT_SOUND;
+  const sound = preferences.soundOn
+    ? (phase === 'due' ? dueSound : 'default')
+    : undefined;
+  const channelId = platform === 'android'
+    ? (preferences.soundOn
+        ? (phase === 'due'
+            ? (prayerId === 'fajr' ? ANDROID_FAJR_CHANNEL : ANDROID_ADHAN_CHANNEL)
+            : undefined)
+        : ANDROID_SILENT_CHANNEL)
+    : undefined;
   return {
     id,
     title,
     body,
     schedule: { at, allowWhileIdle: true },
-    foreground: true,
-    sound: preferences.soundOn ? 'default' : undefined,
+    // iOS suppresses the native banner/sound while Miqati is foregrounded;
+    // the web layer plays the full adhan there, preventing double audio.
+    foreground: platform === 'ios' ? false : true,
+    sound,
+    channelId,
     interruptionLevel: 'active',
     isExactNotification: platform === 'android' ? true : undefined,
     autoCancel: platform === 'android' ? true : undefined,
@@ -124,6 +170,7 @@ export async function schedulePrayerNotifications(
   const permission = await getNativeNotificationPermission();
   if (permission !== 'granted') return { scheduled: 0, days: 0 };
 
+  await ensureAndroidChannels();
   await cancelPrayerNotifications();
 
   const startCivil = civilDayAt(now, place.timeZone);

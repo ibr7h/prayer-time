@@ -314,3 +314,20 @@
 .switch-row svg{
   vector-effect:non-scaling-stroke;
 }
+
+/* Active adhan control */
+.adhan-now-bar{
+  position:fixed;z-index:24;left:50%;bottom:calc(82px + env(safe-area-inset-bottom));
+  transform:translateX(-50%);width:min(476px,calc(100vw - 28px));min-height:64px;
+  display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 12px 11px 15px;
+  border:1px solid #d8e9df;border-radius:18px;background:#f8fbf7f2;color:#24463f;
+  box-shadow:0 12px 32px #102c3730;backdrop-filter:blur(14px);
+}
+.adhan-now-copy{display:flex;align-items:center;gap:10px;min-width:0}
+.adhan-now-copy>div{display:flex;flex-direction:column;gap:2px}
+.adhan-now-copy strong{font-size:12px}.adhan-now-copy small{font-size:10px;color:#748b83}
+.adhan-now-pulse{width:9px;height:9px;border-radius:50%;background:#2d8a6d;box-shadow:0 0 0 5px #2d8a6d1d;flex-shrink:0}
+.adhan-stop-button{
+  border:0;border-radius:12px;background:#7d3f3f;color:#fff;min-height:39px;padding:8px 11px;
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;font-size:10px;font-weight:850;white-space:nowrap;
+}
