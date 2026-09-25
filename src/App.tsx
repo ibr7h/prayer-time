@@ -124,6 +124,7 @@ export default function App() {
   );
   const [coordinates, setCoordinates] = useState({ lat: '', lon: '' });
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const repeatCycleRef = useRef<Set<string>>(new Set());
   const audioGenerationRef = useRef(0);
   const audioUnlockingRef = useRef(false);
   const updaterRef = useRef<AppUpdater | null>(null);
@@ -226,6 +227,17 @@ export default function App() {
 
   const updatePreferences = (patch: Partial<Preferences>) => {
     setStored((current) => ({ ...current, preferences: { ...current.preferences, ...patch } }));
+  };
+
+  const setRepeatProtection = (enabled: boolean) => {
+    repeatCycleRef.current.clear();
+    if (!enabled) {
+      try { localStorage.removeItem(PRAYER_ALERT_STORAGE); } catch { /* ignore */ }
+      setMessage('وضع الاختبار مفعّل: يمكنك إعادة الساعة والمرور بوقت الصلاة مرة أخرى.');
+    } else {
+      setMessage('تم تفعيل منع تكرار التنبيه لنفس الصلاة.');
+    }
+    updatePreferences({ preventRepeatAlerts: enabled });
   };
 
   const stopAudio = useCallback(() => {
@@ -346,10 +358,28 @@ export default function App() {
       const prayerTime = event.at.getTime();
       const beforeKey = `${dateKey}|before5|${id}`;
       const dueKey = `${dateKey}|due|${id}`;
+      const beforeActive = shouldShowBeforeAlert(currentTime, prayerTime);
+      const dueActive = shouldShowDueAlert(currentTime, prayerTime);
 
-      if (shouldShowBeforeAlert(currentTime, prayerTime) && !marks.has(beforeKey)) {
-        marks.add(beforeKey);
-        changed = true;
+      if (!preferences.preventRepeatAlerts) {
+        if (!beforeActive) repeatCycleRef.current.delete(beforeKey);
+        if (!dueActive) repeatCycleRef.current.delete(dueKey);
+      }
+
+      const beforeSeen = preferences.preventRepeatAlerts
+        ? marks.has(beforeKey)
+        : repeatCycleRef.current.has(beforeKey);
+      const dueSeen = preferences.preventRepeatAlerts
+        ? marks.has(dueKey)
+        : repeatCycleRef.current.has(dueKey);
+
+      if (beforeActive && !beforeSeen) {
+        if (preferences.preventRepeatAlerts) {
+          marks.add(beforeKey);
+          changed = true;
+        } else {
+          repeatCycleRef.current.add(beforeKey);
+        }
         setForegroundAlert({
           kind: 'before5',
           prayerId: id,
@@ -366,9 +396,13 @@ export default function App() {
         }
       }
 
-      if (shouldShowDueAlert(currentTime, prayerTime) && !marks.has(dueKey)) {
-        marks.add(dueKey);
-        changed = true;
+      if (dueActive && !dueSeen) {
+        if (preferences.preventRepeatAlerts) {
+          marks.add(dueKey);
+          changed = true;
+        } else {
+          repeatCycleRef.current.add(dueKey);
+        }
         setForegroundAlert({
           kind: 'due',
           prayerId: id,
@@ -387,8 +421,8 @@ export default function App() {
       }
     }
 
-    if (changed) savePrayerAlertMarks(marks);
-  }, [now, schedules, place, preferences.alerts, preferences.soundOn, permission, playAudio, nativeNotifications]);
+    if (changed && preferences.preventRepeatAlerts) savePrayerAlertMarks(marks);
+  }, [now, schedules, place, preferences.alerts, preferences.soundOn, preferences.preventRepeatAlerts, permission, playAudio, nativeNotifications]);
 
   const useMyLocation = useCallback((quiet = false) => {
     if (!navigator.geolocation) { if (!quiet) setMessage('تحديد الموقع غير مدعوم في هذا المتصفح. اختر مدينة أو أدخل الإحداثيات.'); return; }
@@ -703,6 +737,7 @@ export default function App() {
             <div className="notification-row"><span className="switch-icon"><Bell size={20} strokeWidth={1.8} /></span><div><strong>تنبيهات الصلاة</strong><small>{nativeNotifications ? (nativePermission === 'granted' ? 'Native · تعمل عند قفل الشاشة · جدولة ٥ أيام' : nativePermission === 'denied' ? 'الإذن مرفوض من إعدادات الجهاز' : 'تنبيهات محلية أصلية لـ iPhone وAndroid') : (permission === 'granted' ? 'قبل الصلاة بـ٥ دقائق وعند دخول الوقت أثناء تشغيل PWA' : 'لـ iPhone PWA: ثبّت التطبيق أولًا من Safari')}</small></div><button onClick={() => void requestNotifications()} disabled={notificationGranted}>{notificationGranted ? 'مفعّل' : 'تفعيل'}</button></div>
             <div className="notification-row"><span className="switch-icon"><BellRing size={20} strokeWidth={1.8} /></span><div><strong>اختبار إشعار النظام</strong><small>{nativeNotifications ? 'تنبيه تجريبي بعد ٥ ثوانٍ لاختبار القفل والخلفية' : permission === 'granted' ? 'إرسال إشعار نظام تجريبي الآن' : 'سيطلب إذن الإشعارات ثم يرسل اختبارًا'}</small></div><button onClick={() => void testNotification()}>اختبار النظام</button></div>
             <div className="notification-row"><span className="switch-icon"><Clock3 size={20} strokeWidth={1.8} /></span><div><strong>اختبار وقت الصلاة داخل التطبيق</strong><small>يظهر التنبيه فورًا ويبدأ الأذان إذا كان الصوت مفعّلًا</small></div><button onClick={testForegroundPrayerAlert}>اختبار داخل التطبيق</button></div>
+            <label className="switch-row"><span className="switch-icon"><BellRing size={20} strokeWidth={1.8} /></span><span><strong>منع تكرار التنبيه لنفس الصلاة</strong><small>{preferences.preventRepeatAlerts ? 'مفعّل · كل صلاة تُنبه مرة واحدة في اليوم' : 'متوقف · وضع اختبار لإعادة المرور بوقت الصلاة'}</small></span><input aria-label="منع تكرار التنبيه" type="checkbox" checked={preferences.preventRepeatAlerts} onChange={(event) => setRepeatProtection(event.target.checked)} /><span className="switch-track" /></label>
             <div className="notification-health" aria-label="حالة التنبيهات">
               <div><span>الواجهة</span><strong>{document.visibilityState === 'visible' ? 'نشطة' : 'في الخلفية'}</strong></div>
               <div><span>إذن الإشعارات</span><strong>{notificationGranted ? 'مفعّل' : 'غير مفعّل'}</strong></div>
