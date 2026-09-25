@@ -28,10 +28,13 @@ describe('qibla modes screen', () => {
     expect(screen.getByText(/الفيديو لا يغادر جهازك/)).toBeTruthy();
   });
 
-  it('shows a heading-up map with an explicit sensor start control', () => {
+  it('shows a heading-up map with satellite and street basemap choices', () => {
     render(<QiblaScreen place={place} bearing={244} onClose={() => {}} />);
     fireEvent.click(screen.getByRole('tab', { name: /خريطة/ }));
     expect(screen.getByRole('button', { name: /تشغيل اتجاه الخريطة/ })).toBeTruthy();
     expect(screen.getByText(/الخريطة الآن شمالها إلى أعلى/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'قمر صناعي' }).getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(screen.getByRole('button', { name: 'شوارع' }));
+    expect(screen.getByRole('button', { name: 'شوارع' }).getAttribute('aria-pressed')).toBe('true');
   });
 });
