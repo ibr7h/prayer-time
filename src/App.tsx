@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Bell, BellRing, Check, ChevronLeft, Clock3, Compass, Headphones, Info,
   LocateFixed, MapPin, Minus, Moon, Pause, Play, Plus, RefreshCw, Settings2,
-  ShieldCheck, Smartphone, Sun, Sunrise, Sunset, Volume2, VolumeX, WifiOff, X
+  ShieldCheck, Smartphone, Square, Sun, Sunrise, Sunset, Volume2, VolumeX, WifiOff, X
 } from 'lucide-react';
 import {
   cityPresets, civilDayAt, nextPrayer, prayerNames, qiblaBearing, secondsUntil,
@@ -37,7 +37,7 @@ function savePrayerAlertMarks(marks: Set<string>) {
   try { localStorage.setItem(PRAYER_ALERT_STORAGE, JSON.stringify([...marks])); } catch { /* ignore */ }
 }
 
-async function showPrayerNotification(title: string, body: string, tag: string): Promise<boolean> {
+async function showPrayerNotification(title: string, body: string, tag: string, silent = false): Promise<boolean> {
   if (typeof Notification === 'undefined' || Notification.permission !== 'granted' || !('serviceWorker' in navigator)) return false;
   try {
     const registration = await navigator.serviceWorker.getRegistration(import.meta.env.BASE_URL) ?? await navigator.serviceWorker.ready;
@@ -46,6 +46,7 @@ async function showPrayerNotification(title: string, body: string, tag: string):
       icon: `${import.meta.env.BASE_URL}icon-192.png`,
       badge: `${import.meta.env.BASE_URL}icon-192.png`,
       tag,
+      silent,
       data: { url: import.meta.env.BASE_URL }
     });
     return true;
@@ -238,7 +239,8 @@ export default function App() {
           void showPrayerNotification(
             `باقي ٥ دقائق على صلاة ${prayerNames[id]}`,
             `${place.name} · وقت الصلاة ${timeLabel(event.at, place.timeZone)}`,
-            beforeKey
+            beforeKey,
+            !preferences.soundOn
           );
         }
       }
@@ -252,7 +254,8 @@ export default function App() {
           void showPrayerNotification(
             `حان وقت صلاة ${prayerNames[id]}`,
             `بحسب ${place.name} · ${timeLabel(event.at, place.timeZone)}`,
-            dueKey
+            dueKey,
+            !preferences.soundOn
           );
         }
       }
@@ -488,6 +491,11 @@ export default function App() {
 
       {qiblaOpen && place && bearing !== null && <QiblaScreen place={place} bearing={bearing} onClose={() => setQiblaOpen(false)} />}
 
+      {playing && <div className="adhan-now-bar" role="status" aria-live="polite">
+        <div className="adhan-now-copy"><span className="adhan-now-pulse" /><div><strong>الأذان يعمل الآن</strong><small>صلاة {prayerNames[playing]}</small></div></div>
+        <button className="adhan-stop-button" onClick={stopAudio}><Square size={15} fill="currentColor" /> إيقاف الأذان</button>
+      </div>}
+
       {message && <div className="toast" role="status"><span>{message}</span><button onClick={() => setMessage('')} aria-label="إغلاق الرسالة"><X size={17} /></button></div>}
 
       {panel && <div className="modal-layer" onMouseDown={(event) => { if (event.target === event.currentTarget) setPanel(null); }}>
@@ -510,7 +518,7 @@ export default function App() {
             <label className="field-label" htmlFor="madhab">حساب صلاة العصر</label><select id="madhab" className="select-field" value={preferences.madhab} onChange={(event) => updatePreferences({ madhab: event.target.value as Preferences['madhab'] })}><option value="shafi">الجمهور</option><option value="hanafi">الحنفي</option></select>
             <div className="adjust-row"><div><strong>تصحيح الأوقات</strong><small>يُطبّق على الصلوات الخمس، لا الشروق</small></div><div className="stepper"><button aria-label="نقصان دقيقة" disabled={preferences.adjustment <= -30} onClick={() => updatePreferences({ adjustment: preferences.adjustment - 1 })}><Minus size={16} /></button><span dir="ltr">{preferences.adjustment > 0 ? '+' : ''}{preferences.adjustment} د</span><button aria-label="زيادة دقيقة" disabled={preferences.adjustment >= 30} onClick={() => updatePreferences({ adjustment: preferences.adjustment + 1 })}><Plus size={16} /></button></div></div>
             <div className="settings-divider" />
-            <label className="switch-row"><span className="switch-icon"><Volume2 size={20} strokeWidth={1.8} /></span><span><strong>صوت الأذان</strong><small>عندما يحين الوقت والتطبيق مفتوح</small></span><input aria-label="صوت الأذان" type="checkbox" checked={preferences.soundOn} onChange={(event) => updatePreferences({ soundOn: event.target.checked })} /><span className="switch-track" /></label>
+            <label className="switch-row"><span className="switch-icon"><Volume2 size={20} strokeWidth={1.8} /></span><span><strong>صوت الأذان عند دخول الوقت</strong><small>{nativeNotifications ? 'أذان كامل داخل التطبيق · مقطع قصير عند القفل' : 'أذان كامل عندما يكون ميقاتي مفتوحًا'}</small></span><input aria-label="صوت الأذان" type="checkbox" checked={preferences.soundOn} onChange={(event) => updatePreferences({ soundOn: event.target.checked })} /><span className="switch-track" /></label>
             <div className="notification-row"><span className="switch-icon"><Bell size={20} strokeWidth={1.8} /></span><div><strong>تنبيهات الصلاة</strong><small>{nativeNotifications ? (nativePermission === 'granted' ? 'Native · تعمل عند قفل الشاشة · جدولة ٥ أيام' : nativePermission === 'denied' ? 'الإذن مرفوض من إعدادات الجهاز' : 'تنبيهات محلية أصلية لـ iPhone وAndroid') : (permission === 'granted' ? 'قبل الصلاة بـ٥ دقائق وعند دخول الوقت أثناء تشغيل PWA' : 'لـ iPhone PWA: ثبّت التطبيق أولًا من Safari')}</small></div><button onClick={() => void requestNotifications()} disabled={notificationGranted}>{notificationGranted ? 'مفعّل' : 'تفعيل'}</button></div>
             <div className="notification-row"><span className="switch-icon"><BellRing size={20} strokeWidth={1.8} /></span><div><strong>اختبار التنبيه</strong><small>{nativeNotifications ? 'تنبيه تجريبي بعد ٥ ثوانٍ لاختبار القفل والخلفية' : permission === 'granted' ? 'إرسال إشعار تجريبي الآن' : 'سيطلب إذن الإشعارات ثم يرسل اختبارًا'}</small></div><button onClick={() => void testNotification()}>اختبار</button></div>
             <div className="notification-row"><span className="switch-icon"><RefreshCw size={20} strokeWidth={1.8} /></span><div><strong>تحديث التطبيق</strong><small>الإصدار v{APP_VERSION} · فحص تلقائي عند الفتح والعودة للتطبيق</small></div><button onClick={() => void updaterRef.current?.check(true)}>فحص</button></div>
