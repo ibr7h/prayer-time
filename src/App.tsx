@@ -110,6 +110,7 @@ export default function App() {
   const [message, setMessage] = useState('');
   const [foregroundAlert, setForegroundAlert] = useState<ForegroundPrayerAlert>(null);
   const [playing, setPlaying] = useState<PrayerId | null>(null);
+  const [audioReady, setAudioReady] = useState(false);
   const [online, setOnline] = useState(navigator.onLine);
   const [permission, setPermission] = useState(
     typeof Notification === 'undefined' ? 'unsupported' : Notification.permission
@@ -119,6 +120,8 @@ export default function App() {
   );
   const [coordinates, setCoordinates] = useState({ lat: '', lon: '' });
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioGenerationRef = useRef(0);
+  const audioUnlockingRef = useRef(false);
   const updaterRef = useRef<AppUpdater | null>(null);
   const [updateView, setUpdateView] = useState<UpdateView | null>(null);
 
@@ -207,25 +210,105 @@ export default function App() {
   };
 
   const stopAudio = useCallback(() => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
-      audioRef.current = null;
+    audioGenerationRef.current += 1;
+    const audio = audioRef.current;
+    if (audio) {
+      audio.pause();
+      try { audio.currentTime = 0; } catch { /* media may not be ready yet */ }
     }
     setPlaying(null);
   }, []);
 
+  const prepareTrack = useCallback((id: PrayerId) => {
+    const audio = audioRef.current;
+    if (!audio || id === 'sunrise') return null;
+    const track = id === 'fajr' ? 'fajr' : 'default';
+    const src = `${import.meta.env.BASE_URL}audio/${track === 'fajr' ? 'adhan-fajr' : 'adhan-default'}.mp3`;
+    if (audio.dataset.track !== track) {
+      audio.dataset.track = track;
+      audio.src = src;
+      audio.load();
+    }
+    return audio;
+  }, []);
+
   const playAudio = useCallback(async (id: PrayerId) => {
     if (id === 'sunrise') return;
-    stopAudio();
-    const src = `${import.meta.env.BASE_URL}audio/${id === 'fajr' ? 'adhan-fajr' : 'adhan-default'}.mp3`;
-    const audio = new Audio(src);
-    audioRef.current = audio;
-    audio.onended = () => { if (audioRef.current === audio) { audioRef.current = null; setPlaying(null); } };
-    audio.onerror = () => { if (audioRef.current === audio) { audioRef.current = null; setPlaying(null); setMessage('تعذّر تحميل الصوت. أعد فتح التطبيق عند توفر اتصال بالإنترنت.'); } };
-    try { await audio.play(); setPlaying(id); }
-    catch { if (audioRef.current === audio) audioRef.current = null; setPlaying(null); setMessage('لم يسمح الجهاز بتشغيل الصوت تلقائيًا. اضغط تشغيل الأذان يدويًا.'); }
-  }, [stopAudio]);
+    const audio = prepareTrack(id);
+    if (!audio) return;
+
+    audioGenerationRef.current += 1;
+    const generation = audioGenerationRef.current;
+    audioUnlockingRef.current = false;
+    audio.pause();
+    try { audio.currentTime = 0; } catch { /* media may not be ready yet */ }
+    audio.muted = false;
+    audio.volume = 1;
+    audio.onended = () => {
+      if (audioGenerationRef.current !== generation) return;
+      setPlaying(null);
+    };
+    audio.onerror = () => {
+      if (audioGenerationRef.current !== generation) return;
+      setPlaying(null);
+      setMessage('تعذّر تحميل صوت الأذان. أعد فتح التطبيق عند توفر اتصال بالإنترنت.');
+    };
+
+    try {
+      await audio.play();
+      if (audioGenerationRef.current !== generation) return;
+      setAudioReady(true);
+      setPlaying(id);
+    } catch (error) {
+      if (audioGenerationRef.current !== generation) return;
+      setPlaying(null);
+      const blocked = error instanceof DOMException && error.name === 'NotAllowedError';
+      setMessage(blocked
+        ? 'منع iPhone التشغيل التلقائي. اضغط «تشغيل الأذان» مرة واحدة لتهيئة الصوت، وبعدها يعيد ميقاتي استخدام نفس المشغّل.'
+        : 'تعذّر تشغيل صوت الأذان. اضغط «تشغيل الأذان» للمحاولة مرة أخرى.');
+    }
+  }, [prepareTrack]);
+
+  const primeAdhanAudio = useCallback(() => {
+    if (!preferences.soundOn || audioReady || audioUnlockingRef.current) return;
+    const audio = prepareTrack('dhuhr');
+    if (!audio) return;
+
+    audioUnlockingRef.current = true;
+    audioGenerationRef.current += 1;
+    const generation = audioGenerationRef.current;
+    audio.muted = true;
+    audio.volume = 0;
+    const attempt = audio.play();
+
+    if (!attempt) {
+      audioUnlockingRef.current = false;
+      return;
+    }
+
+    void attempt.then(() => {
+      if (audioGenerationRef.current !== generation) return;
+      audio.pause();
+      try { audio.currentTime = 0; } catch { /* ignore */ }
+      audio.muted = false;
+      audio.volume = 1;
+      audioUnlockingRef.current = false;
+      setAudioReady(true);
+    }).catch(() => {
+      if (audioGenerationRef.current === generation) {
+        audioUnlockingRef.current = false;
+        audio.muted = false;
+        audio.volume = 1;
+      }
+    });
+  }, [audioReady, preferences.soundOn, prepareTrack]);
+
+  useEffect(() => {
+    if (!preferences.soundOn || audioReady) return;
+    const unlock = () => { primeAdhanAudio(); };
+    document.addEventListener('pointerdown', unlock, { capture: true, once: true });
+    return () => document.removeEventListener('pointerdown', unlock, true);
+  }, [audioReady, preferences.soundOn, primeAdhanAudio]);
 
   // Same foreground notification pattern used in Student Records:
   // one alert shortly before the event and one at the event time, with daily duplicate protection.
@@ -434,10 +517,14 @@ export default function App() {
   };
 
   const testForegroundPrayerAlert = () => {
-    setPanel(null);
     const candidate = upcoming?.id && upcoming.id !== 'sunrise'
       ? upcoming.id as AlertPrayerId
       : 'fajr';
+
+    // Keep play() in the direct click call stack for iPhone/WebKit.
+    if (preferences.soundOn) void playAudio(candidate);
+
+    setPanel(null);
     setForegroundAlert({
       kind: 'due',
       prayerId: candidate,
@@ -445,7 +532,6 @@ export default function App() {
       detail: 'هذا هو التنبيه الذي سيظهر عندما يكون ميقاتي مفتوحًا.',
       isTest: true
     });
-    if (preferences.soundOn) void playAudio(candidate);
   };
 
   const notificationGranted = nativeNotifications
@@ -559,6 +645,15 @@ export default function App() {
 
       {message && <div className="toast" role="status"><span>{message}</span><button onClick={() => setMessage('')} aria-label="إغلاق الرسالة"><X size={17} /></button></div>}
 
+      <audio
+        ref={audioRef}
+        className="adhan-audio-engine"
+        preload="auto"
+        src={`${import.meta.env.BASE_URL}audio/adhan-default.mp3`}
+        data-track="default"
+        aria-hidden="true"
+      />
+
       {panel && <div className="modal-layer" onMouseDown={(event) => { if (event.target === event.currentTarget) setPanel(null); }}>
         <section className="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
           <div className="sheet-handle" /><div className="sheet-top"><h2 id="sheet-title">{panel === 'location' ? 'اختيار الموقع' : panel === 'settings' ? 'الإعدادات' : 'عن التنبيهات'}</h2><button className="icon-button" onClick={() => setPanel(null)} aria-label="إغلاق"><X size={20} strokeWidth={1.8} /></button></div>
@@ -579,7 +674,7 @@ export default function App() {
             <label className="field-label" htmlFor="madhab">حساب صلاة العصر</label><select id="madhab" className="select-field" value={preferences.madhab} onChange={(event) => updatePreferences({ madhab: event.target.value as Preferences['madhab'] })}><option value="shafi">الجمهور</option><option value="hanafi">الحنفي</option></select>
             <div className="adjust-row"><div><strong>تصحيح الأوقات</strong><small>يُطبّق على الصلوات الخمس، لا الشروق</small></div><div className="stepper"><button aria-label="نقصان دقيقة" disabled={preferences.adjustment <= -30} onClick={() => updatePreferences({ adjustment: preferences.adjustment - 1 })}><Minus size={16} /></button><span dir="ltr">{preferences.adjustment > 0 ? '+' : ''}{preferences.adjustment} د</span><button aria-label="زيادة دقيقة" disabled={preferences.adjustment >= 30} onClick={() => updatePreferences({ adjustment: preferences.adjustment + 1 })}><Plus size={16} /></button></div></div>
             <div className="settings-divider" />
-            <label className="switch-row"><span className="switch-icon"><Volume2 size={20} strokeWidth={1.8} /></span><span><strong>صوت الأذان عند دخول الوقت</strong><small>{nativeNotifications ? 'أذان كامل داخل التطبيق · مقطع قصير عند القفل' : 'أذان كامل عندما يكون ميقاتي مفتوحًا'}</small></span><input aria-label="صوت الأذان" type="checkbox" checked={preferences.soundOn} onChange={(event) => updatePreferences({ soundOn: event.target.checked })} /><span className="switch-track" /></label>
+            <label className="switch-row"><span className="switch-icon"><Volume2 size={20} strokeWidth={1.8} /></span><span><strong>صوت الأذان عند دخول الوقت</strong><small>{preferences.soundOn ? (audioReady ? 'الصوت مهيأ · ' : 'سيُهيأ عند أول لمسة · ') : ''}{nativeNotifications ? 'أذان كامل داخل التطبيق · مقطع قصير عند القفل' : 'أذان كامل عندما يكون ميقاتي مفتوحًا'}</small></span><input aria-label="صوت الأذان" type="checkbox" checked={preferences.soundOn} onChange={(event) => { setAudioReady(false); updatePreferences({ soundOn: event.target.checked }); }} /><span className="switch-track" /></label>
             <div className="notification-row"><span className="switch-icon"><Bell size={20} strokeWidth={1.8} /></span><div><strong>تنبيهات الصلاة</strong><small>{nativeNotifications ? (nativePermission === 'granted' ? 'Native · تعمل عند قفل الشاشة · جدولة ٥ أيام' : nativePermission === 'denied' ? 'الإذن مرفوض من إعدادات الجهاز' : 'تنبيهات محلية أصلية لـ iPhone وAndroid') : (permission === 'granted' ? 'قبل الصلاة بـ٥ دقائق وعند دخول الوقت أثناء تشغيل PWA' : 'لـ iPhone PWA: ثبّت التطبيق أولًا من Safari')}</small></div><button onClick={() => void requestNotifications()} disabled={notificationGranted}>{notificationGranted ? 'مفعّل' : 'تفعيل'}</button></div>
             <div className="notification-row"><span className="switch-icon"><BellRing size={20} strokeWidth={1.8} /></span><div><strong>اختبار إشعار النظام</strong><small>{nativeNotifications ? 'تنبيه تجريبي بعد ٥ ثوانٍ لاختبار القفل والخلفية' : permission === 'granted' ? 'إرسال إشعار نظام تجريبي الآن' : 'سيطلب إذن الإشعارات ثم يرسل اختبارًا'}</small></div><button onClick={() => void testNotification()}>اختبار النظام</button></div>
             <div className="notification-row"><span className="switch-icon"><Clock3 size={20} strokeWidth={1.8} /></span><div><strong>اختبار وقت الصلاة داخل التطبيق</strong><small>يظهر التنبيه فورًا ويبدأ الأذان إذا كان الصوت مفعّلًا</small></div><button onClick={testForegroundPrayerAlert}>اختبار داخل التطبيق</button></div>
