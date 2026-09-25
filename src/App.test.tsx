@@ -50,7 +50,9 @@ describe('phone app interactions', () => {
     expect(screen.getByRole('button', { name: 'اختبار داخل التطبيق' })).toBeTruthy();
     expect(screen.getByText('اختبار إشعار النظام')).toBeTruthy();
     expect(screen.getByText('اختبار وقت الصلاة داخل التطبيق')).toBeTruthy();
+    expect(screen.getByText(/يظهر التنبيه فورًا/)).toBeTruthy();
     expect(screen.getByText('صوت الأذان عند دخول الوقت')).toBeTruthy();
+    expect(screen.getByText(/سيُهيأ عند أول لمسة/)).toBeTruthy();
     expect(screen.getByRole('checkbox', { name: 'صوت الأذان' })).toBeTruthy();
   });
 
