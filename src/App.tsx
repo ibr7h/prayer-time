@@ -13,6 +13,7 @@ import { loadState, saveState } from './storage';
 import QiblaScreen from './QiblaScreen';
 import { APP_VERSION, startAppUpdater, type AppUpdater, type UpdateView } from './updater';
 import { shouldShowBeforeAlert, shouldShowDueAlert } from './foregroundAlerts';
+import { prayerAlertMarkKey } from './prayerAlertState';
 import {
   getNativeNotificationPermission, isNativeNotificationPlatform,
   requestNativeNotificationPermission, schedulePrayerNotifications,
@@ -26,11 +27,12 @@ type ForegroundPrayerAlert = {
   prayerId: AlertPrayerId;
   title: string;
   detail: string;
+  audioMarkKey?: string;
   isTest?: boolean;
 } | null;
 const alertIds: AlertPrayerId[] = ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha'];
 const icons = { fajr: Moon, sunrise: Sunrise, dhuhr: Sun, asr: Sun, maghrib: Sunset, isha: Moon };
-const PRAYER_ALERT_STORAGE = 'miqati:prayer-alerts:v1';
+const PRAYER_ALERT_STORAGE = 'miqati:prayer-alerts:v2';
 
 function prayerAlertMarks(dateKey: string): Set<string> {
   try {
@@ -125,6 +127,7 @@ export default function App() {
   const [coordinates, setCoordinates] = useState({ lat: '', lon: '' });
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const repeatCycleRef = useRef<Set<string>>(new Set());
+  const autoAdhanAttemptRef = useRef<Set<string>>(new Set());
   const audioGenerationRef = useRef(0);
   const audioUnlockingRef = useRef(false);
   const updaterRef = useRef<AppUpdater | null>(null);
@@ -231,6 +234,7 @@ export default function App() {
 
   const setRepeatProtection = (enabled: boolean) => {
     repeatCycleRef.current.clear();
+    autoAdhanAttemptRef.current.clear();
     if (!enabled) {
       try { localStorage.removeItem(PRAYER_ALERT_STORAGE); } catch { /* ignore */ }
       setMessage('وضع الاختبار مفعّل: يمكنك إعادة الساعة والمرور بوقت الصلاة مرة أخرى.');
@@ -263,10 +267,10 @@ export default function App() {
     return audio;
   }, []);
 
-  const playAudio = useCallback(async (id: PrayerId) => {
-    if (id === 'sunrise') return;
+  const playAudio = useCallback(async (id: PrayerId): Promise<boolean> => {
+    if (id === 'sunrise') return false;
     const audio = prepareTrack(id);
-    if (!audio) return;
+    if (!audio) return false;
 
     audioGenerationRef.current += 1;
     const generation = audioGenerationRef.current;
@@ -290,6 +294,7 @@ export default function App() {
       if (audioGenerationRef.current !== generation) return;
       setAudioReady(true);
       setPlaying(id);
+      return true;
     } catch (error) {
       if (audioGenerationRef.current !== generation) return;
       setPlaying(null);
@@ -297,8 +302,27 @@ export default function App() {
       setMessage(blocked
         ? 'منع iPhone التشغيل التلقائي. اضغط «تشغيل الأذان» مرة واحدة لتهيئة الصوت، وبعدها يعيد ميقاتي استخدام نفس المشغّل.'
         : 'تعذّر تشغيل صوت الأذان. اضغط «تشغيل الأذان» للمحاولة مرة أخرى.');
+      return false;
     }
   }, [prepareTrack]);
+
+  const recordAdhanStarted = useCallback((markKey: string) => {
+    if (!markKey) return;
+    if (preferences.preventRepeatAlerts) {
+      const dateKey = markKey.split('|', 1)[0];
+      const marks = prayerAlertMarks(dateKey);
+      marks.add(markKey);
+      savePrayerAlertMarks(marks);
+    } else {
+      repeatCycleRef.current.add(markKey);
+    }
+  }, [preferences.preventRepeatAlerts]);
+
+  const playAndRecordAdhan = useCallback(async (id: PrayerId, markKey?: string) => {
+    const started = await playAudio(id);
+    if (started && markKey) recordAdhanStarted(markKey);
+    return started;
+  }, [playAudio, recordAdhanStarted]);
 
   const primeAdhanAudio = useCallback(() => {
     if (!preferences.soundOn || audioReady || audioUnlockingRef.current) return;
@@ -356,22 +380,30 @@ export default function App() {
       if (!preferences.alerts[id] || !Number.isFinite(event.at.getTime())) continue;
 
       const prayerTime = event.at.getTime();
-      const beforeKey = `${dateKey}|before5|${id}`;
-      const dueKey = `${dateKey}|due|${id}`;
+      const beforeKey = prayerAlertMarkKey(dateKey, 'before5', id);
+      const dueAlertKey = prayerAlertMarkKey(dateKey, 'dueAlert', id);
+      const adhanStartedKey = prayerAlertMarkKey(dateKey, 'adhanStarted', id);
       const beforeActive = shouldShowBeforeAlert(currentTime, prayerTime);
       const dueActive = shouldShowDueAlert(currentTime, prayerTime);
 
       if (!preferences.preventRepeatAlerts) {
         if (!beforeActive) repeatCycleRef.current.delete(beforeKey);
-        if (!dueActive) repeatCycleRef.current.delete(dueKey);
+        if (!dueActive) {
+          repeatCycleRef.current.delete(dueAlertKey);
+          repeatCycleRef.current.delete(adhanStartedKey);
+          autoAdhanAttemptRef.current.delete(adhanStartedKey);
+        }
       }
 
       const beforeSeen = preferences.preventRepeatAlerts
         ? marks.has(beforeKey)
         : repeatCycleRef.current.has(beforeKey);
-      const dueSeen = preferences.preventRepeatAlerts
-        ? marks.has(dueKey)
-        : repeatCycleRef.current.has(dueKey);
+      const dueAlertSeen = preferences.preventRepeatAlerts
+        ? marks.has(dueAlertKey)
+        : repeatCycleRef.current.has(dueAlertKey);
+      const adhanStarted = preferences.preventRepeatAlerts
+        ? marks.has(adhanStartedKey)
+        : repeatCycleRef.current.has(adhanStartedKey);
 
       if (beforeActive && !beforeSeen) {
         if (preferences.preventRepeatAlerts) {
@@ -396,33 +428,38 @@ export default function App() {
         }
       }
 
-      if (dueActive && !dueSeen) {
+      if (dueActive && !dueAlertSeen) {
         if (preferences.preventRepeatAlerts) {
-          marks.add(dueKey);
+          marks.add(dueAlertKey);
           changed = true;
         } else {
-          repeatCycleRef.current.add(dueKey);
+          repeatCycleRef.current.add(dueAlertKey);
         }
         setForegroundAlert({
           kind: 'due',
           prayerId: id,
           title: `حان الآن وقت صلاة ${prayerNames[id]}`,
-          detail: `${place.name} · ${timeLabel(event.at, place.timeZone)}`
+          detail: `${place.name} · ${timeLabel(event.at, place.timeZone)}`,
+          audioMarkKey: adhanStartedKey
         });
-        if (preferences.soundOn) void playAudio(id);
         if (!nativeNotifications && permission === 'granted') {
           void showPrayerNotification(
             `حان وقت صلاة ${prayerNames[id]}`,
             `بحسب ${place.name} · ${timeLabel(event.at, place.timeZone)}`,
-            dueKey,
+            dueAlertKey,
             !preferences.soundOn
           );
         }
       }
+
+      if (dueActive && preferences.soundOn && !adhanStarted && !autoAdhanAttemptRef.current.has(adhanStartedKey)) {
+        autoAdhanAttemptRef.current.add(adhanStartedKey);
+        void playAndRecordAdhan(id, adhanStartedKey);
+      }
     }
 
     if (changed && preferences.preventRepeatAlerts) savePrayerAlertMarks(marks);
-  }, [now, schedules, place, preferences.alerts, preferences.soundOn, preferences.preventRepeatAlerts, permission, playAudio, nativeNotifications]);
+  }, [now, schedules, place, preferences.alerts, preferences.soundOn, preferences.preventRepeatAlerts, permission, playAndRecordAdhan, nativeNotifications]);
 
   const useMyLocation = useCallback((quiet = false) => {
     if (!navigator.geolocation) { if (!quiet) setMessage('تحديد الموقع غير مدعوم في هذا المتصفح. اختر مدينة أو أدخل الإحداثيات.'); return; }
@@ -690,7 +727,7 @@ export default function App() {
             {foregroundAlert.kind === 'due' && preferences.soundOn && (
               playing === foregroundAlert.prayerId
                 ? <button className="foreground-stop-button" onClick={stopAudio}><Square size={15} fill="currentColor" /> إيقاف الأذان</button>
-                : <button className="foreground-play-button" onClick={() => void playAudio(foregroundAlert.prayerId)}><Play size={15} fill="currentColor" /> تشغيل الأذان</button>
+                : <button className="foreground-play-button" onClick={() => void playAndRecordAdhan(foregroundAlert.prayerId, foregroundAlert.audioMarkKey)}><Play size={15} fill="currentColor" /> تشغيل الأذان</button>
             )}
             <button className="foreground-dismiss-button" onClick={() => setForegroundAlert(null)}>إغلاق</button>
           </div>
@@ -737,7 +774,7 @@ export default function App() {
             <div className="notification-row"><span className="switch-icon"><Bell size={20} strokeWidth={1.8} /></span><div><strong>تنبيهات الصلاة</strong><small>{nativeNotifications ? (nativePermission === 'granted' ? 'Native · تعمل عند قفل الشاشة · جدولة ٥ أيام' : nativePermission === 'denied' ? 'الإذن مرفوض من إعدادات الجهاز' : 'تنبيهات محلية أصلية لـ iPhone وAndroid') : (permission === 'granted' ? 'قبل الصلاة بـ٥ دقائق وعند دخول الوقت أثناء تشغيل PWA' : 'لـ iPhone PWA: ثبّت التطبيق أولًا من Safari')}</small></div><button onClick={() => void requestNotifications()} disabled={notificationGranted}>{notificationGranted ? 'مفعّل' : 'تفعيل'}</button></div>
             <div className="notification-row"><span className="switch-icon"><BellRing size={20} strokeWidth={1.8} /></span><div><strong>اختبار إشعار النظام</strong><small>{nativeNotifications ? 'تنبيه تجريبي بعد ٥ ثوانٍ لاختبار القفل والخلفية' : permission === 'granted' ? 'إرسال إشعار نظام تجريبي الآن' : 'سيطلب إذن الإشعارات ثم يرسل اختبارًا'}</small></div><button onClick={() => void testNotification()}>اختبار النظام</button></div>
             <div className="notification-row"><span className="switch-icon"><Clock3 size={20} strokeWidth={1.8} /></span><div><strong>اختبار وقت الصلاة داخل التطبيق</strong><small>يظهر التنبيه فورًا ويبدأ الأذان إذا كان الصوت مفعّلًا</small></div><button onClick={testForegroundPrayerAlert}>اختبار داخل التطبيق</button></div>
-            <label className="switch-row"><span className="switch-icon"><BellRing size={20} strokeWidth={1.8} /></span><span><strong>منع تكرار التنبيه لنفس الصلاة</strong><small>{preferences.preventRepeatAlerts ? 'مفعّل · كل صلاة تُنبه مرة واحدة في اليوم' : 'متوقف · وضع اختبار لإعادة المرور بوقت الصلاة'}</small></span><input aria-label="منع تكرار التنبيه" type="checkbox" checked={preferences.preventRepeatAlerts} onChange={(event) => setRepeatProtection(event.target.checked)} /><span className="switch-track" /></label>
+            <label className="switch-row"><span className="switch-icon"><BellRing size={20} strokeWidth={1.8} /></span><span><strong>منع تكرار التنبيه لنفس الصلاة</strong><small>{preferences.preventRepeatAlerts ? 'مفعّل · يمنع تكرار التنبيه، ولا يعتبر الأذان ناجحًا إلا بعد بدء الصوت' : 'متوقف · وضع اختبار لإعادة المرور بوقت الصلاة'}</small></span><input aria-label="منع تكرار التنبيه" type="checkbox" checked={preferences.preventRepeatAlerts} onChange={(event) => setRepeatProtection(event.target.checked)} /><span className="switch-track" /></label>
             <div className="notification-health" aria-label="حالة التنبيهات">
               <div><span>الواجهة</span><strong>{document.visibilityState === 'visible' ? 'نشطة' : 'في الخلفية'}</strong></div>
               <div><span>إذن الإشعارات</span><strong>{notificationGranted ? 'مفعّل' : 'غير مفعّل'}</strong></div>
