@@ -62,6 +62,12 @@ jobs:
         working-directory: native
         run: npx cap sync ios
 
+      - name: Bundle notification sounds into iOS app
+        working-directory: native
+        run: |
+          node scripts/prepare-native-sounds.mjs ios
+          ruby scripts/add-ios-sounds.rb
+
       - name: Compile iOS simulator app
         working-directory: native
         run: |
