@@ -138,6 +138,12 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!message) return;
+    const timeout = window.setTimeout(() => setMessage(''), 5000);
+    return () => window.clearTimeout(timeout);
+  }, [message]);
+
+  useEffect(() => {
     if (panel === 'location') {
       setCoordinates({
         lat: place?.latitude.toFixed(5) ?? '',
@@ -342,12 +348,60 @@ export default function App() {
     }
   };
 
-  const testNativeNotification = async () => {
+  const testNotification = async () => {
+    if (nativeNotifications) {
+      try {
+        let currentPermission = nativePermission;
+        if (currentPermission !== 'granted') {
+          currentPermission = await requestNativeNotificationPermission();
+          setNativePermission(currentPermission);
+        }
+        if (currentPermission !== 'granted') {
+          setMessage('لم يُسمح بالتنبيهات. فعّل الإذن من إعدادات الجهاز ثم أعد الاختبار.');
+          return;
+        }
+        const ok = await sendNativeTestNotification();
+        setMessage(ok
+          ? 'تم جدولة تنبيه تجريبي؛ سيصل خلال ٥ ثوانٍ. يمكنك قفل الشاشة لاختباره.'
+          : 'تعذّر اختبار التنبيه؛ تحقق من إذن الإشعارات.');
+      } catch {
+        setMessage('تعذّر إنشاء تنبيه الاختبار على هذا الجهاز.');
+      }
+      return;
+    }
+
+    if (typeof Notification === 'undefined' || !('serviceWorker' in navigator)) {
+      setMessage('إشعارات هذا المتصفح غير متاحة. على iPhone ثبّت ميقاتي على الشاشة الرئيسية أولًا.');
+      return;
+    }
+
     try {
-      const ok = await sendNativeTestNotification();
-      setMessage(ok ? 'سيصل تنبيه اختبار خلال ٥ ثوانٍ.' : 'تعذّر اختبار التنبيه؛ تحقق من إذن الإشعارات.');
+      let currentPermission = Notification.permission;
+      if (currentPermission !== 'granted') {
+        if (currentPermission === 'denied') {
+          setPermission('denied');
+          setMessage('إذن الإشعارات مرفوض. غيّره من إعدادات المتصفح أو الجهاز ثم أعد الاختبار.');
+          return;
+        }
+        currentPermission = await Notification.requestPermission();
+        setPermission(currentPermission);
+      }
+
+      if (currentPermission !== 'granted') {
+        setMessage('لم يتم السماح بالإشعارات، لذلك لا يمكن إرسال تنبيه الاختبار.');
+        return;
+      }
+
+      const ok = await showPrayerNotification(
+        'تنبيه تجريبي من ميقاتي',
+        'إذا ظهر هذا الإشعار فتنبيهات ميقاتي تعمل على هذا الجهاز.',
+        `miqati-test-${Date.now()}`
+      );
+      setMessage(ok
+        ? 'تم إرسال تنبيه تجريبي الآن. إذا ظهر الإشعار فالتنبيهات تعمل بصورة صحيحة.'
+        : 'تعذّر إرسال تنبيه الاختبار. تأكد أن ميقاتي مثبت وأن إذن الإشعارات مفعّل.');
     } catch {
-      setMessage('تعذّر إنشاء تنبيه الاختبار على هذا الجهاز.');
+      setMessage('تعذّر اختبار الإشعارات. على iPhone افتح ميقاتي من الشاشة الرئيسية ثم حاول مرة أخرى.');
     }
   };
 
@@ -458,7 +512,7 @@ export default function App() {
             <div className="settings-divider" />
             <label className="switch-row"><span className="switch-icon"><Volume2 size={20} strokeWidth={1.8} /></span><span><strong>صوت الأذان</strong><small>عندما يحين الوقت والتطبيق مفتوح</small></span><input aria-label="صوت الأذان" type="checkbox" checked={preferences.soundOn} onChange={(event) => updatePreferences({ soundOn: event.target.checked })} /><span className="switch-track" /></label>
             <div className="notification-row"><span className="switch-icon"><Bell size={20} strokeWidth={1.8} /></span><div><strong>تنبيهات الصلاة</strong><small>{nativeNotifications ? (nativePermission === 'granted' ? 'Native · تعمل عند قفل الشاشة · جدولة ٥ أيام' : nativePermission === 'denied' ? 'الإذن مرفوض من إعدادات الجهاز' : 'تنبيهات محلية أصلية لـ iPhone وAndroid') : (permission === 'granted' ? 'قبل الصلاة بـ٥ دقائق وعند دخول الوقت أثناء تشغيل PWA' : 'لـ iPhone PWA: ثبّت التطبيق أولًا من Safari')}</small></div><button onClick={() => void requestNotifications()} disabled={notificationGranted}>{notificationGranted ? 'مفعّل' : 'تفعيل'}</button></div>
-            {nativeNotifications && nativePermission === 'granted' && <div className="notification-row"><span className="switch-icon"><BellRing size={20} strokeWidth={1.8} /></span><div><strong>اختبار التنبيه</strong><small>أرسل تنبيهًا تجريبيًا بعد ٥ ثوانٍ</small></div><button onClick={() => void testNativeNotification()}>اختبار</button></div>}
+            <div className="notification-row"><span className="switch-icon"><BellRing size={20} strokeWidth={1.8} /></span><div><strong>اختبار التنبيه</strong><small>{nativeNotifications ? 'تنبيه تجريبي بعد ٥ ثوانٍ لاختبار القفل والخلفية' : permission === 'granted' ? 'إرسال إشعار تجريبي الآن' : 'سيطلب إذن الإشعارات ثم يرسل اختبارًا'}</small></div><button onClick={() => void testNotification()}>اختبار</button></div>
             <div className="notification-row"><span className="switch-icon"><RefreshCw size={20} strokeWidth={1.8} /></span><div><strong>تحديث التطبيق</strong><small>الإصدار v{APP_VERSION} · فحص تلقائي عند الفتح والعودة للتطبيق</small></div><button onClick={() => void updaterRef.current?.check(true)}>فحص</button></div>
             <h3 className="sheet-section-title">الصلاة المشمولة بالتنبيه</h3><div className="alert-grid">{alertIds.map((id) => <label key={id} className="alert-choice"><input type="checkbox" checked={preferences.alerts[id]} onChange={() => toggleAlert(id)} /><span>{prayerNames[id]}</span><Check size={15} /></label>)}</div>
             <p className="fine-print">عند شهر رمضان، تُضاف ٣٠ دقيقة لعشاء طريقة أم القرى تلقائيًا. راجع تقويم مسجدك.</p>
