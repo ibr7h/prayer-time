@@ -325,7 +325,6 @@ export default function App() {
       if (!preferences.alerts[id] || !Number.isFinite(event.at.getTime())) continue;
 
       const prayerTime = event.at.getTime();
-      const beforeTime = prayerTime - 5 * 60_000;
       const beforeKey = `${dateKey}|before5|${id}`;
       const dueKey = `${dateKey}|due|${id}`;
 
