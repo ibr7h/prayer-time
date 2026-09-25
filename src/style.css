@@ -364,16 +364,3 @@
 .foreground-play-button{border:0;background:#2d7b60;color:#fff}
 .foreground-dismiss-button{border:1px solid #d6e2dc;background:#fff;color:#526a62}
 
-/* Notification lifecycle diagnostics */
-.notification-health{
-  margin:8px 0 4px;padding:12px;border:1px solid #dce8e2;border-radius:16px;
-  background:#f9fbf9;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 10px;
-}
-.notification-health>div{display:flex;flex-direction:column;gap:2px}
-.notification-health span{font-size:9px;color:#7d9088}
-.notification-health strong{font-size:11px;color:#2f554a}
-.notification-health>small{grid-column:1/-1;font-size:9px;color:#8a9a94}
-.notification-health>button{
-  grid-column:1/-1;border:1px solid #d5e3dd;background:#fff;color:#365f53;
-  min-height:36px;border-radius:11px;font-size:10px;font-weight:800;
-}

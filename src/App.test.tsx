@@ -59,8 +59,7 @@ describe('phone app interactions', () => {
     fireEvent.click(repeatProtection);
     expect(repeatProtection.checked).toBe(false);
     expect(screen.getByText(/وضع اختبار لإعادة المرور بوقت الصلاة/)).toBeTruthy();
-    expect(screen.getByLabelText('حالة التنبيهات')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'إعادة الفحص الآن' })).toBeTruthy();
+    expect(screen.queryByLabelText('حالة التنبيهات')).toBeNull();
   });
 
 });
