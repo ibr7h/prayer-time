@@ -76,6 +76,9 @@ jobs:
         working-directory: native
         run: npx cap sync android
 
+      - name: Bundle notification sounds into Android app
+        run: node native/scripts/prepare-native-sounds.mjs android
+
       - name: Apply Android permissions
         run: node native/scripts/prepare-android.mjs
 
