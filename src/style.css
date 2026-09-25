@@ -178,6 +178,22 @@
   position:absolute;z-index:0;left:50%;top:50%;width:150%;height:150%;border:0;pointer-events:none;
   transform-origin:50% 50%;will-change:transform;transition:none;filter:saturate(.95) contrast(.98);
 }
+.qibla-map-satellite-layer{object-fit:cover;user-select:none;-webkit-user-drag:none;filter:saturate(1.03) contrast(1.03) brightness(.96)}
+.map-style-toggle{
+  position:absolute;z-index:13;top:58px;left:50%;transform:translateX(-50%);display:flex;gap:3px;
+  padding:3px;border-radius:13px;background:#f8faf5df;border:1px solid #ffffff9c;backdrop-filter:blur(12px);
+  box-shadow:0 5px 16px #102c3722;
+}
+.map-style-toggle button{
+  min-width:72px;border:0;border-radius:10px;padding:7px 9px;background:transparent;color:#536962;
+  font-size:9px;font-weight:850;white-space:nowrap;
+}
+.map-style-toggle button.active{background:#245f55;color:#fff;box-shadow:0 2px 7px #163b342b}
+.map-provider-warning{
+  position:absolute;z-index:13;top:103px;left:50%;transform:translateX(-50%);max-width:calc(100% - 34px);
+  border-radius:11px;padding:7px 10px;background:#fff1dfdd;color:#8a6540;backdrop-filter:blur(10px);
+  font-size:9px;line-height:1.5;text-align:center;white-space:nowrap;
+}
 .qibla-map-offline{position:absolute;z-index:1;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;color:#60736d;background:#edf1ea;text-align:center}
 .qibla-map-offline span{font-size:11px}
 .map-location-chip,.map-sensor-chip{
@@ -252,6 +268,10 @@
   position:absolute;z-index:13;left:50%;transform:translateX(-50%);bottom:124px;max-width:calc(100% - 32px);
   display:flex;align-items:center;gap:7px;padding:8px 11px;border-radius:12px;background:#fff3dfdc;color:#86653e;
   backdrop-filter:blur(10px);font-size:9px;white-space:nowrap;
+}
+.map-attribution{
+  position:absolute;z-index:11;left:8px;bottom:132px;max-width:62%;padding:3px 6px;border-radius:7px;
+  background:#102c3780;color:#fff;font-size:7px;line-height:1.35;backdrop-filter:blur(6px);text-align:left;direction:ltr;
 }
 .map-note{margin:0;padding:9px 16px calc(10px + env(safe-area-inset-bottom));background:#f8f8f4;color:#72867f}
 
