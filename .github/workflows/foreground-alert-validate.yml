@@ -1,0 +1,21 @@
+name: Validate Foreground Prayer Alert
+on:
+  push:
+    branches: [foreground-prayer-alert-v0.7.1]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - run: npm run build -- --mode capacitor
