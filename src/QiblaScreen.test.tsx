@@ -28,10 +28,10 @@ describe('qibla modes screen', () => {
     expect(screen.getByText(/الفيديو لا يغادر جهازك/)).toBeTruthy();
   });
 
-  it('shows a north-up map with the qibla bearing overlay', () => {
+  it('shows a heading-up map with an explicit sensor start control', () => {
     render(<QiblaScreen place={place} bearing={244} onClose={() => {}} />);
     fireEvent.click(screen.getByRole('tab', { name: /خريطة/ }));
-    expect(screen.getByText(/الخريطة شمالها إلى أعلى/)).toBeTruthy();
-    expect(screen.getAllByText('244°').length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: /تشغيل اتجاه الخريطة/ })).toBeTruthy();
+    expect(screen.getByText(/الخريطة الآن شمالها إلى أعلى/)).toBeTruthy();
   });
 });
