@@ -142,7 +142,9 @@ function makeNotification(
     title,
     body,
     schedule: { at, allowWhileIdle: true },
-    foreground: true,
+    // iOS suppresses the native banner/sound while Miqati is foregrounded;
+    // the web layer plays the full adhan there, preventing double audio.
+    foreground: platform === 'ios' ? false : true,
     sound,
     channelId,
     interruptionLevel: preferences.soundOn ? 'active' : 'passive',
