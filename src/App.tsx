@@ -386,7 +386,7 @@ export default function App() {
             <img src={`${import.meta.env.BASE_URL}icon.svg`} alt="" className="brand-mark" />
             <div><span className="brand-title">ميقاتي</span><span className="brand-subtitle">وقتك للصلاة، أينما كنت</span></div>
           </div>
-          <button className="icon-button header-settings" onClick={() => setPanel('settings')} aria-label="إعدادات التطبيق"><Settings2 size={21} /></button>
+          <button className="icon-button header-settings" onClick={() => setPanel('settings')} aria-label="إعدادات التطبيق"><Settings2 size={20} strokeWidth={1.8} /></button>
         </header>
 
         <div className="date-line"><span>{dates.gregorian}</span><span className="date-divider">•</span><span>{dates.hijri}</span></div>
@@ -406,11 +406,11 @@ export default function App() {
         </section>
 
         <button className="location-card" onClick={() => setPanel('location')}>
-          <span className="location-icon"><MapPin size={20} /></span>
+          <span className="location-icon"><MapPin size={20} strokeWidth={1.8} /></span>
           <span className="location-copy"><strong>{place?.name ?? 'حدّد موقعك للبدء'}</strong><small>{place
             ? place.source === 'gps' ? `موقع فعلي ${place.accuracy ? `· دقة نحو ${Math.round(place.accuracy)} م` : ''}` : 'موقع مختار يدويًا'
             : 'اسمح بالموقع أو اختر مدينة'}</small></span>
-          <span className="location-change">{place ? 'تغيير' : 'ابدأ'}</span><ChevronLeft size={18} />
+          <span className="location-change">{place ? 'تغيير' : 'ابدأ'}</span><ChevronLeft size={18} strokeWidth={1.8} />
         </button>
 
         <div className="section-heading"><div><span className="eyebrow">جدول اليوم</span><h2>مواقيت الصلاة</h2></div><span className="section-caption">{place ? '٦ أوقات' : 'حدّد الموقع أولًا'}</span></div>
@@ -425,9 +425,9 @@ export default function App() {
           <div className="empty-state"><LocateFixed size={34} /><strong>المواقيت بانتظار موقعك</strong><p>نحسبها على جهازك دون إرسال إحداثياتك إلى خادم التطبيق.</p><button className="primary-button" onClick={() => setPanel('location')}>تحديد الموقع</button></div>
         )}
 
-        {place && <button className="qibla-card" onClick={() => setQiblaOpen(true)} aria-label="فتح شاشة القبلة"><span className="qibla-symbol"><Compass size={21} /></span><div><strong>اتجاه القبلة</strong><small>بوصلة · أسهم · خريطة</small></div><span className="qibla-angle" dir="ltr">{bearing}°</span><ChevronLeft size={18} /></button>}
+        {place && <button className="qibla-card" onClick={() => setQiblaOpen(true)} aria-label="فتح شاشة القبلة"><span className="qibla-symbol"><Compass size={20} strokeWidth={1.8} /></span><div><strong>اتجاه القبلة</strong><small>بوصلة · أسهم · خريطة</small></div><span className="qibla-angle" dir="ltr">{bearing}°</span><ChevronLeft size={18} strokeWidth={1.8} /></button>}
 
-        <section className="reality-card"><span className="reality-icon"><Info size={20} /></span><div><strong>{nativeNotifications ? 'تنبيهات أصلية على الجهاز' : 'تنبيه مهم بخصوص iPhone'}</strong><p>{nativeNotifications ? 'تُجدول تنبيهات الصلاة محليًا على الجهاز للأيام الخمسة القادمة، لذلك يمكن أن تصل عند قفل الشاشة أو إغلاق التطبيق. الأذان الكامل يبقى ميزة منفصلة عن صوت الإشعار.' : 'الصوت والتنبيه المباشر يعملان أثناء فتح التطبيق. عند إغلاقه أو قفل الشاشة لا نضمن وصول تنبيه أو تشغيل الأذان؛ إشعارات الخلفية تحتاج Web Push أو النسخة الأصلية من التطبيق.'}</p><button className="text-action" onClick={() => setPanel('info')}>كيف يعمل التطبيق؟ <ChevronLeft size={15} /></button></div></section>
+        <section className="reality-card"><span className="reality-icon"><Info size={20} strokeWidth={1.8} /></span><div><strong>{nativeNotifications ? 'تنبيهات أصلية على الجهاز' : 'تنبيه مهم بخصوص iPhone'}</strong><p>{nativeNotifications ? 'تُجدول تنبيهات الصلاة محليًا على الجهاز للأيام الخمسة القادمة، لذلك يمكن أن تصل عند قفل الشاشة أو إغلاق التطبيق. الأذان الكامل يبقى ميزة منفصلة عن صوت الإشعار.' : 'الصوت والتنبيه المباشر يعملان أثناء فتح التطبيق. عند إغلاقه أو قفل الشاشة لا نضمن وصول تنبيه أو تشغيل الأذان؛ إشعارات الخلفية تحتاج Web Push أو النسخة الأصلية من التطبيق.'}</p><button className="text-action" onClick={() => setPanel('info')}>كيف يعمل التطبيق؟ <ChevronLeft size={15} strokeWidth={1.8} /></button></div></section>
 
         <footer className="footer"><span><ShieldCheck size={16} /> الحساب على جهازك · إحداثياتك لا تُرسل لخادم التطبيق</span><span>{online ? 'جاهز للعمل دون اتصال بعد أول تحميل' : <><WifiOff size={14} /> أنت غير متصل، المواقيت متاحة</>}</span><span>الإصدار v{APP_VERSION}</span></footer>
       </main>
@@ -438,11 +438,11 @@ export default function App() {
 
       {panel && <div className="modal-layer" onMouseDown={(event) => { if (event.target === event.currentTarget) setPanel(null); }}>
         <section className="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
-          <div className="sheet-handle" /><div className="sheet-top"><h2 id="sheet-title">{panel === 'location' ? 'اختيار الموقع' : panel === 'settings' ? 'الإعدادات' : 'عن التنبيهات'}</h2><button className="icon-button" onClick={() => setPanel(null)} aria-label="إغلاق"><X size={20} /></button></div>
+          <div className="sheet-handle" /><div className="sheet-top"><h2 id="sheet-title">{panel === 'location' ? 'اختيار الموقع' : panel === 'settings' ? 'الإعدادات' : 'عن التنبيهات'}</h2><button className="icon-button" onClick={() => setPanel(null)} aria-label="إغلاق"><X size={20} strokeWidth={1.8} /></button></div>
 
           {panel === 'location' && <div className="sheet-body">
             <p className="sheet-intro">نستخدم الموقع لحساب أوقات الصلاة على جهازك فقط. يمكنك تغييره في أي وقت.</p>
-            <button className="primary-button wide" onClick={() => useMyLocation()} disabled={locating}><LocateFixed size={19} /> {locating ? 'جارٍ تحديد موقعك…' : 'استخدم موقعي الفعلي'}</button>
+            <button className="primary-button wide" onClick={() => useMyLocation()} disabled={locating}><LocateFixed size={20} strokeWidth={1.8} /> {locating ? 'جارٍ تحديد موقعك…' : 'استخدم موقعي الفعلي'}</button>
             <div className="subtle-note"><ShieldCheck size={16} /> لا تُرسل الإحداثيات إلى خادم التطبيق؛ تُحفظ على هذا الجهاز.</div>
             <h3 className="sheet-section-title">أو اختر مدينة سعودية</h3>
             <div className="city-grid">{cityPresets.map((city) => <button key={city.name} onClick={() => setCity(city)} className={place?.source === 'city' && place.name === city.name ? 'selected' : ''}>{city.name}{place?.source === 'city' && place.name === city.name && <Check size={15} />}</button>)}</div>
@@ -456,19 +456,19 @@ export default function App() {
             <label className="field-label" htmlFor="madhab">حساب صلاة العصر</label><select id="madhab" className="select-field" value={preferences.madhab} onChange={(event) => updatePreferences({ madhab: event.target.value as Preferences['madhab'] })}><option value="shafi">الجمهور</option><option value="hanafi">الحنفي</option></select>
             <div className="adjust-row"><div><strong>تصحيح الأوقات</strong><small>يُطبّق على الصلوات الخمس، لا الشروق</small></div><div className="stepper"><button aria-label="نقصان دقيقة" disabled={preferences.adjustment <= -30} onClick={() => updatePreferences({ adjustment: preferences.adjustment - 1 })}><Minus size={16} /></button><span dir="ltr">{preferences.adjustment > 0 ? '+' : ''}{preferences.adjustment} د</span><button aria-label="زيادة دقيقة" disabled={preferences.adjustment >= 30} onClick={() => updatePreferences({ adjustment: preferences.adjustment + 1 })}><Plus size={16} /></button></div></div>
             <div className="settings-divider" />
-            <label className="switch-row"><span className="switch-icon"><Volume2 size={20} /></span><span><strong>صوت الأذان</strong><small>عندما يحين الوقت والتطبيق مفتوح</small></span><input aria-label="صوت الأذان" type="checkbox" checked={preferences.soundOn} onChange={(event) => updatePreferences({ soundOn: event.target.checked })} /><span className="switch-track" /></label>
-            <div className="notification-row"><span className="switch-icon"><Bell size={20} /></span><div><strong>تنبيهات الصلاة</strong><small>{nativeNotifications ? (nativePermission === 'granted' ? 'Native · تعمل عند قفل الشاشة · جدولة ٥ أيام' : nativePermission === 'denied' ? 'الإذن مرفوض من إعدادات الجهاز' : 'تنبيهات محلية أصلية لـ iPhone وAndroid') : (permission === 'granted' ? 'قبل الصلاة بـ٥ دقائق وعند دخول الوقت أثناء تشغيل PWA' : 'لـ iPhone PWA: ثبّت التطبيق أولًا من Safari')}</small></div><button onClick={() => void requestNotifications()} disabled={notificationGranted}>{notificationGranted ? 'مفعّل' : 'تفعيل'}</button></div>
-            {nativeNotifications && nativePermission === 'granted' && <div className="notification-row"><span className="switch-icon"><BellRing size={20} /></span><div><strong>اختبار التنبيه</strong><small>أرسل تنبيهًا تجريبيًا بعد ٥ ثوانٍ</small></div><button onClick={() => void testNativeNotification()}>اختبار</button></div>}
-            <div className="notification-row"><span className="switch-icon"><RefreshCw size={20} /></span><div><strong>تحديث التطبيق</strong><small>الإصدار v{APP_VERSION} · فحص تلقائي عند الفتح والعودة للتطبيق</small></div><button onClick={() => void updaterRef.current?.check(true)}>فحص</button></div>
+            <label className="switch-row"><span className="switch-icon"><Volume2 size={20} strokeWidth={1.8} /></span><span><strong>صوت الأذان</strong><small>عندما يحين الوقت والتطبيق مفتوح</small></span><input aria-label="صوت الأذان" type="checkbox" checked={preferences.soundOn} onChange={(event) => updatePreferences({ soundOn: event.target.checked })} /><span className="switch-track" /></label>
+            <div className="notification-row"><span className="switch-icon"><Bell size={20} strokeWidth={1.8} /></span><div><strong>تنبيهات الصلاة</strong><small>{nativeNotifications ? (nativePermission === 'granted' ? 'Native · تعمل عند قفل الشاشة · جدولة ٥ أيام' : nativePermission === 'denied' ? 'الإذن مرفوض من إعدادات الجهاز' : 'تنبيهات محلية أصلية لـ iPhone وAndroid') : (permission === 'granted' ? 'قبل الصلاة بـ٥ دقائق وعند دخول الوقت أثناء تشغيل PWA' : 'لـ iPhone PWA: ثبّت التطبيق أولًا من Safari')}</small></div><button onClick={() => void requestNotifications()} disabled={notificationGranted}>{notificationGranted ? 'مفعّل' : 'تفعيل'}</button></div>
+            {nativeNotifications && nativePermission === 'granted' && <div className="notification-row"><span className="switch-icon"><BellRing size={20} strokeWidth={1.8} /></span><div><strong>اختبار التنبيه</strong><small>أرسل تنبيهًا تجريبيًا بعد ٥ ثوانٍ</small></div><button onClick={() => void testNativeNotification()}>اختبار</button></div>}
+            <div className="notification-row"><span className="switch-icon"><RefreshCw size={20} strokeWidth={1.8} /></span><div><strong>تحديث التطبيق</strong><small>الإصدار v{APP_VERSION} · فحص تلقائي عند الفتح والعودة للتطبيق</small></div><button onClick={() => void updaterRef.current?.check(true)}>فحص</button></div>
             <h3 className="sheet-section-title">الصلاة المشمولة بالتنبيه</h3><div className="alert-grid">{alertIds.map((id) => <label key={id} className="alert-choice"><input type="checkbox" checked={preferences.alerts[id]} onChange={() => toggleAlert(id)} /><span>{prayerNames[id]}</span><Check size={15} /></label>)}</div>
             <p className="fine-print">عند شهر رمضان، تُضاف ٣٠ دقيقة لعشاء طريقة أم القرى تلقائيًا. راجع تقويم مسجدك.</p>
           </div>}
 
           {panel === 'info' && <div className="sheet-body info-body">
-            <div className="info-item"><span><MapPin size={20} /></span><div><strong>موقعك وخصوصيتك</strong><p>المواقيت تُحسب على الجهاز من إحداثياتك ولا نرسلها إلى خادم التطبيق. يُحدّث الموقع عند الفتح إن كنت قد أذنت به. للمواقع خارج السعودية، تأكد أن توقيت الجهاز يطابق المكان.</p></div></div>
-            <div className="info-item"><span><Headphones size={20} /></span><div><strong>الأذان الصوتي</strong><p>اضغط تشغيل بجانب الصلاة لتجربة الصوت. يمكن للتطبيق محاولة تشغيله عند دخول الوقت أثناء فتحه، لكن المتصفح قد يمنع التشغيل التلقائي.</p></div></div>
-            <div className="info-item"><span><BellRing size={20} /></span><div><strong>تنبيهات الصلاة</strong><p>{nativeNotifications ? 'في نسخة iPhone/Android تُجدول التنبيهات محليًا على الجهاز: قبل الصلاة بـ٥ دقائق وعند دخول الوقت، وتُعاد الجدولة تلقائيًا عند تغيير الموقع أو طريقة الحساب أو التصحيح أو الصلوات المفعّلة.' : 'في نسخة PWA يظهر تنبيه قبل الصلاة بـ٥ دقائق ثم تنبيه عند دخول الوقت أثناء تشغيل التطبيق. للعمل عند الإغلاق يلزم Web Push أو تثبيت النسخة الأصلية من ميقاتي.'}</p></div></div>
-            <div className="info-item"><span><Smartphone size={20} /></span><div><strong>إضافة التطبيق للآيفون</strong><p>بعد نشره عبر HTTPS، افتح الرابط في Safari ثم اختر «مشاركة ← إضافة إلى الشاشة الرئيسية». بعد أول تحميل تصبح الحسابات والصوت متاحة دون إنترنت.</p></div></div>
+            <div className="info-item"><span><MapPin size={20} strokeWidth={1.8} /></span><div><strong>موقعك وخصوصيتك</strong><p>المواقيت تُحسب على الجهاز من إحداثياتك ولا نرسلها إلى خادم التطبيق. يُحدّث الموقع عند الفتح إن كنت قد أذنت به. للمواقع خارج السعودية، تأكد أن توقيت الجهاز يطابق المكان.</p></div></div>
+            <div className="info-item"><span><Headphones size={20} strokeWidth={1.8} /></span><div><strong>الأذان الصوتي</strong><p>اضغط تشغيل بجانب الصلاة لتجربة الصوت. يمكن للتطبيق محاولة تشغيله عند دخول الوقت أثناء فتحه، لكن المتصفح قد يمنع التشغيل التلقائي.</p></div></div>
+            <div className="info-item"><span><BellRing size={20} strokeWidth={1.8} /></span><div><strong>تنبيهات الصلاة</strong><p>{nativeNotifications ? 'في نسخة iPhone/Android تُجدول التنبيهات محليًا على الجهاز: قبل الصلاة بـ٥ دقائق وعند دخول الوقت، وتُعاد الجدولة تلقائيًا عند تغيير الموقع أو طريقة الحساب أو التصحيح أو الصلوات المفعّلة.' : 'في نسخة PWA يظهر تنبيه قبل الصلاة بـ٥ دقائق ثم تنبيه عند دخول الوقت أثناء تشغيل التطبيق. للعمل عند الإغلاق يلزم Web Push أو تثبيت النسخة الأصلية من ميقاتي.'}</p></div></div>
+            <div className="info-item"><span><Smartphone size={20} strokeWidth={1.8} /></span><div><strong>إضافة التطبيق للآيفون</strong><p>بعد نشره عبر HTTPS، افتح الرابط في Safari ثم اختر «مشاركة ← إضافة إلى الشاشة الرئيسية». بعد أول تحميل تصبح الحسابات والصوت متاحة دون إنترنت.</p></div></div>
             <span className="install-status">{standalone() ? 'التطبيق مفتوح من الشاشة الرئيسية' : 'تعمل الآن في المتصفح؛ يمكنك إضافته للشاشة الرئيسية بعد نشره'}</span>
           </div>}
         </section>
