@@ -1,4 +1,4 @@
-export const APP_VERSION = '0.6.3';
+export const APP_VERSION = '0.7.0';
 
 export interface UpdateView {
   visible: boolean;
