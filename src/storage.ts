@@ -32,6 +32,7 @@ export function loadState(): StoredState {
         madhab: settings.madhab === 'hanafi' ? 'hanafi' : 'shafi',
         adjustment,
         soundOn: settings.soundOn !== false,
+        preventRepeatAlerts: settings.preventRepeatAlerts !== false,
         alerts: {
           fajr: settings.alerts?.fajr !== false,
           dhuhr: settings.alerts?.dhuhr !== false,
