@@ -147,7 +147,7 @@ function makeNotification(
     foreground: platform === 'ios' ? false : true,
     sound,
     channelId,
-    interruptionLevel: preferences.soundOn ? 'active' : 'passive',
+    interruptionLevel: 'active',
     isExactNotification: platform === 'android' ? true : undefined,
     autoCancel: platform === 'android' ? true : undefined,
     extra: {
