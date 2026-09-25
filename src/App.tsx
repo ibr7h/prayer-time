@@ -291,12 +291,12 @@ export default function App() {
 
     try {
       await audio.play();
-      if (audioGenerationRef.current !== generation) return;
+      if (audioGenerationRef.current !== generation) return false;
       setAudioReady(true);
       setPlaying(id);
       return true;
     } catch (error) {
-      if (audioGenerationRef.current !== generation) return;
+      if (audioGenerationRef.current !== generation) return false;
       setPlaying(null);
       const blocked = error instanceof DOMException && error.name === 'NotAllowedError';
       setMessage(blocked
